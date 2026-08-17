@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+build/
+
+# Env / secrets
+.env
+.env.*
+*.key
+
+# Data / uploads (never commit real applicant documents)
+uploads/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!schema/**
+
+# Model artifacts
+*.pkl
+*.joblib
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
