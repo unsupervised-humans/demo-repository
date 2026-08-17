@@ -1,1 +1,22 @@
+# LoanIQ CODEOWNERS
 
+# Harris — Ingestion & Document Classification
+/ingestion/ @Hane67
+
+# Austin — Field Extraction
+/extraction/ @austinsajeev
+
+# Alina — Validation & Fraud Detection
+/validation/ @alinashaji-12
+
+# Christy — Orchestration & Workflow
+/orchestrator/ @Christy-Saji
+
+# Rohit — Risk Scoring & Compliance
+/risk/ @rohitkurian-ai
+
+# Shared code and integration
+/shared/ @austinsajeev
+
+# GitHub configuration
+/.github/ @austinsajeev
