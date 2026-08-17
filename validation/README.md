@@ -1,4 +1,4 @@
-# validation — Person 3
+# validation — alina
 
 Owns: cross-document validation agent, missing-document agent, fraud/anomaly detection agent.
 

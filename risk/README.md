@@ -1,4 +1,4 @@
-# risk — Person 4
+# risk — Rohit
 
 Owns: risk scoring model, compliance & fairness agent.
 

@@ -1,4 +1,4 @@
-# orchestrator — Person 5
+# orchestrator — Christy
 
 Owns: pipeline orchestrator (state machine), summarization agent, RAG Q&A agent, human review dashboard.
 

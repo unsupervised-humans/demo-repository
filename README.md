@@ -10,12 +10,16 @@ One monorepo, one folder per owner. Everyone builds against the shared `loan_fil
 
 | Folder | Owner | Agents |
 |---|---|---|
-| `/ingestion` | Person 1 | document classifier, synthetic document generator |
-| `/extraction` | Person 2 | field extraction agent (OCR + LLM, confidence + citations) |
-| `/validation` | Person 3 | cross-document validation, missing-document, fraud detection |
-| `/risk` | Person 4 | risk scoring model (Kaggle dataset), compliance & fairness agent |
-| `/orchestrator` | Person 5 | pipeline orchestrator, summarization agent, RAG Q&A, review dashboard |
+| `/ingestion` | Harris | document classifier, synthetic document generator |
+| `/extraction` | Austin | field extraction agent (OCR + LLM, confidence + citations) |
+| `/validation` | Alina | cross-document validation, missing-document, fraud detection |
+| `/risk` | Rohit | risk scoring model (Kaggle dataset), compliance & fairness agent |
+| `/orchestrator` | Christy | pipeline orchestrator, summarization agent, RAG Q&A, review dashboard |
 | `/schema` | shared | `loan_file.schema.json` (the contract), `loan_file.example.json` (test fixture) |
+| `/shared` | Austin | code more than one agent depends on (schema loader, shared LLM client, logging) |
+| `/.github` | Austin | CI workflow that validates the schema on every PR |
+
+See `CODEOWNERS` — GitHub auto-requests the right person's review based on which folder a PR touches.
 
 ## The contract
 
@@ -25,6 +29,7 @@ Rules:
 - Only the orchestrator (`/orchestrator`) writes `status`.
 - `audit_log` is append-only — every agent adds one entry when it runs.
 - Never rename or remove a field another agent depends on without raising it in the group chat first.
+- Validate your agent's output with `shared/schema_loader.py` before opening a PR — CI runs the same check automatically and will fail your PR if the example fixture doesn't validate.
 
 ## Branching
 
