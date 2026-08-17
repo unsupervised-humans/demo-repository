@@ -1,0 +1,18 @@
+# LoanIQ extraction pipeline dependencies
+# Install with: pip install -r requirements.txt
+#
+# Required — must be installed for the extraction pipeline to run:
+openai>=1.0.0          # xAI Grok client (OpenAI-compatible SDK)
+jsonschema>=4.0.0      # Schema validation (shared/schema_loader.py)
+
+# Optional — needed only if processing real PDF or image documents:
+# pdfminer.six>=20221105   # PDF embedded-text extraction (extraction/ocr_fallback.py)
+# pytesseract>=0.3.0       # OCR for scanned images (extraction/ocr_fallback.py)
+# Pillow>=9.0.0            # Image loading for pytesseract (extraction/ocr_fallback.py)
+# NOTE: pytesseract also requires the Tesseract binary:
+#   Ubuntu/Debian: sudo apt install tesseract-ocr
+#   macOS:         brew install tesseract
+#   Windows:       https://github.com/UB-Mannheim/tesseract/wiki
+
+# Development / test:
+pytest>=7.0.0
