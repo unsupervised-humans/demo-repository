@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://loanIQ.internal/schemas/loan_file.schema.json",
+  "title": "LoanFile",
+  "description": "Shared contract that flows through the loan document agent pipeline. Each agent reads the fields it needs and appends the fields it owns. Never rename or remove a field another agent depends on without updating this schema.",
+  "type": "object",
+  "required": ["application_id", "created_at", "status", "documents"],
+  "properties": {
+
+    "application_id": {
+      "type": "string",
+      "description": "Unique ID for this loan application, e.g. APP-2026-000123"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "description": "Where this file is in the pipeline. Only the orchestrator (Person 5) should change this.",
+      "enum": [
+        "ingested",
+        "classifying",
+        "extracting",
+        "validating",
+        "scoring",
+        "ready_for_review",
+        "more_docs_requested",
+        "approved",
+        "rejected"
+      ]
+    },
+    "applicant": {
+      "type": "object",
+      "description": "Populated by extraction, cross-checked by validation. Not user-entered.",
+      "properties": {
+        "name": { "type": "string" },
+        "declared_income": { "type": "number" },
+        "loan_amount_requested": { "type": "number" },
+        "loan_type": { "type": "string", "enum": ["personal", "home", "auto", "education", "business"] }
+      }
+    },
+
+    "documents": {
+      "type": "array",
+      "description": "Owned by Person 1 (ingestion & classification). Every uploaded file becomes one entry here.",
+      "items": { "$ref": "#/$defs/document" }
+    },
+
+    "extracted_fields": {
+      "type": "array",
+      "description": "Owned by Person 2 (extraction). One entry per data point pulled from a document, always traceable back to its source.",
+      "items": { "$ref": "#/$defs/extractedField" }
+    },
+
+    "validation_findings": {
+      "type": "array",
+      "description": "Owned by Person 3 (validation). Cross-document consistency checks.",
+      "items": { "$ref": "#/$defs/validationFinding" }
+    },
+
+    "missing_documents": {
+      "type": "array",
+      "description": "Owned by Person 3 (validation/missing-doc agent).",
+      "items": { "$ref": "#/$defs/missingDocument" }
+    },
+
+    "fraud_flags": {
+      "type": "array",
+      "description": "Owned by Person 3 (fraud detection agent).",
+      "items": { "$ref": "#/$defs/fraudFlag" }
+    },
+
+    "risk_score": {
+      "description": "Owned by Person 4 (risk scoring agent). Null until scoring has run.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/riskScore" }
+      ]
+    },
+
+    "compliance": {
+      "description": "Owned by Person 4 (compliance & fairness agent). Null until the compliance check has run.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/complianceReport" }
+      ]
+    },
+
+    "summary_report": {
+      "description": "Owned by Person 5 (summarization agent). Null until the file is ready for review.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/summaryReport" }
+      ]
+    },
+
+    "reviewer_decision": {
+      "description": "Owned by Person 5 (dashboard). Filled in by the human reviewer, not an agent.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/reviewerDecision" }
+      ]
+    },
+
+    "audit_log": {
+      "type": "array",
+      "description": "Every agent appends one entry per action it takes. Shared across all repos — never overwrite, only append.",
+      "items": { "$ref": "#/$defs/auditEntry" }
+    }
+  },
+
+  "$defs": {
+
+    "document": {
+      "type": "object",
+      "required": ["doc_id", "file_path", "type", "classification_confidence"],
+      "properties": {
+        "doc_id": { "type": "string", "description": "e.g. doc-01" },
+        "file_path": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["payslip", "bank_statement", "tax_return", "kyc_id", "other"]
+        },
+        "classification_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "page_count": { "type": "integer", "minimum": 1 },
+        "is_synthetic": {
+          "type": "boolean",
+          "description": "True if this doc came from Person 1's synthetic document generator (used for testing)."
+        }
+      }
+    },
+
+    "sourceRef": {
+      "type": "object",
+      "description": "Points back to exactly where a value came from. Required for explainability.",
+      "required": ["doc_id", "page"],
+      "properties": {
+        "doc_id": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1 },
+        "bbox": {
+          "type": "array",
+          "description": "[x, y, width, height] in normalized 0-1 coordinates, optional if unavailable.",
+          "items": { "type": "number" },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      }
+    },
+
+    "extractedField": {
+      "type": "object",
+      "required": ["field_name", "value", "confidence", "source"],
+      "properties": {
+        "field_name": {
+          "type": "string",
+          "description": "e.g. gross_monthly_income, employer_name, account_balance, applicant_name, id_expiry_date"
+        },
+        "value": {},
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source": { "$ref": "#/$defs/sourceRef" },
+        "needs_review": {
+          "type": "boolean",
+          "description": "True when confidence is below the extraction threshold. Drives the human-review queue."
+        }
+      }
+    },
+
+    "validationFinding": {
+      "type": "object",
+      "required": ["finding_id", "severity", "description"],
+      "properties": {
+        "finding_id": { "type": "string" },
+        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+        "description": { "type": "string" },
+        "related_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "field_name values involved, e.g. [\"applicant_name\", \"id_name\"]"
+        },
+        "doc_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "missingDocument": {
+      "type": "object",
+      "required": ["document_type", "reason"],
+      "properties": {
+        "document_type": { "type": "string", "enum": ["payslip", "bank_statement", "tax_return", "kyc_id"] },
+        "reason": { "type": "string", "description": "Why it's required for this loan type/amount" },
+        "request_drafted": { "type": "boolean" },
+        "request_message": { "type": "string" }
+      }
+    },
+
+    "fraudFlag": {
+      "type": "object",
+      "required": ["flag_id", "severity", "description"],
+      "properties": {
+        "flag_id": { "type": "string" },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "description": { "type": "string" },
+        "evidence": { "type": "string" },
+        "doc_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "riskScore": {
+      "type": "object",
+      "required": ["approval_probability", "model_version"],
+      "properties": {
+        "approval_probability": { "type": "number", "minimum": 0, "maximum": 1 },
+        "model_version": { "type": "string" },
+        "factors": {
+          "type": "array",
+          "description": "SHAP-style factor breakdown, most influential first.",
+          "items": {
+            "type": "object",
+            "required": ["feature", "contribution"],
+            "properties": {
+              "feature": { "type": "string" },
+              "contribution": { "type": "number", "description": "Positive pushes toward approval, negative away from it." }
+            }
+          }
+        }
+      }
+    },
+
+    "complianceReport": {
+      "type": "object",
+      "required": ["bias_check_passed"],
+      "properties": {
+        "bias_check_passed": { "type": "boolean" },
+        "protected_attributes_excluded": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "summaryReport": {
+      "type": "object",
+      "required": ["narrative", "recommendation"],
+      "properties": {
+        "narrative": { "type": "string" },
+        "recommendation": { "type": "string", "enum": ["approve", "reject", "request_more_info"] },
+        "citations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sourceRef" }
+        }
+      }
+    },
+
+    "reviewerDecision": {
+      "type": "object",
+      "required": ["decision", "reviewer", "decided_at"],
+      "properties": {
+        "decision": { "type": "string", "enum": ["approved", "rejected", "more_docs_requested"] },
+        "reviewer": { "type": "string" },
+        "decided_at": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "auditEntry": {
+      "type": "object",
+      "required": ["agent", "action", "timestamp"],
+      "properties": {
+        "agent": { "type": "string", "description": "e.g. classifier, extraction, validation, fraud, risk_scoring, compliance, orchestrator" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
