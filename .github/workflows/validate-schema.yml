@@ -1,0 +1,25 @@
+name: Validate loan_file schema
+
+# Runs on every PR so a broken schema/example never merges silently.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install jsonschema
+        run: pip install jsonschema
+
+      - name: Validate loan_file.example.json against loan_file.schema.json
+        run: python shared/schema_loader.py
