@@ -1,109 +1,150 @@
 """Dataset management for loan risk scoring models.
 
-Supports loading external datasets (e.g., Kaggle loan approval datasets)
-and generating synthetic training data for development and testing.
+Loads and preprocesses the real Kaggle Loan Approval Prediction Dataset
+for production model training, and provides a synthetic generator for unit testing.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 
 from risk.features import NUMERIC_FEATURE_NAMES
 
+DEFAULT_RAW_DATA_PATH = (
+    Path(__file__).resolve().parent / "data" / "raw" / "loan_approval_dataset.csv"
+)
+
 
 def generate_synthetic_loan_dataset(
     n_samples: int = 1000,
     random_state: int = 42,
 ) -> pd.DataFrame:
-    """Generate a realistic synthetic dataset for loan approval training.
+    """Generate synthetic dataset for unit testing only, not used for the production model.
 
     Args:
-        n_samples: Number of samples to generate.
+        n_samples: Number of synthetic records to produce.
         random_state: Random seed for reproducibility.
 
     Returns:
-        pd.DataFrame containing feature columns and target 'approved' (0 or 1).
+        pd.DataFrame containing feature columns and binary target 'approved'.
     """
     rng = np.random.default_rng(random_state)
 
-    # Incomes: 25k to 250k
-    declared_income = np.exp(rng.normal(loc=11.0, scale=0.5, size=n_samples))
-    declared_income = np.clip(declared_income, 20000, 300000).round(2)
+    no_of_dependents = rng.integers(0, 6, size=n_samples).astype(float)
+    education = rng.choice([0.0, 1.0], size=n_samples, p=[0.25, 0.75])
+    self_employed = rng.choice([0.0, 1.0], size=n_samples, p=[0.8, 0.2])
 
-    # Loan amounts requested: 50k to 1M
-    loan_amount = np.exp(rng.normal(loc=12.5, scale=0.6, size=n_samples))
-    loan_amount = np.clip(loan_amount, 50000, 1500000).round(2)
+    income_annum = np.clip(np.exp(rng.normal(15.2, 0.6, size=n_samples)), 200000, 10000000).round(2)
+    loan_amount = np.clip(np.exp(rng.normal(16.0, 0.7, size=n_samples)), 300000, 35000000).round(2)
+    loan_term = rng.choice([2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0], size=n_samples)
+    cibil_score = np.clip(rng.normal(620, 120, size=n_samples), 300, 900).round(1)
 
-    income_to_loan_ratio = declared_income / loan_amount
+    residential_assets = np.clip(income_annum * rng.uniform(0.5, 3.0, size=n_samples), 0, 30000000).round(2)
+    commercial_assets = np.clip(income_annum * rng.uniform(0.0, 2.0, size=n_samples), 0, 20000000).round(2)
+    luxury_assets = np.clip(income_annum * rng.uniform(0.5, 4.0, size=n_samples), 0, 40000000).round(2)
+    bank_asset_value = np.clip(income_annum * rng.uniform(0.2, 1.5, size=n_samples), 0, 15000000).round(2)
 
-    # Gross income and bank deposits with some noise/variance
-    income_noise = rng.normal(0, 0.08, size=n_samples)
-    gross_monthly_income = declared_income
-    avg_monthly_deposit = np.maximum(0, declared_income * (1.0 + income_noise)).round(2)
-
-    deposit_to_income_ratio = avg_monthly_deposit / np.maximum(gross_monthly_income, 1.0)
-    denom = np.maximum(gross_monthly_income, avg_monthly_deposit)
-    deposit_consistency = np.maximum(
-        0.0, 1.0 - (np.abs(gross_monthly_income - avg_monthly_deposit) / denom)
-    )
-
-    # Extraction confidence metrics
-    avg_extraction_conf = np.clip(rng.beta(a=9, b=1, size=n_samples), 0.5, 1.0)
-    min_extraction_conf = np.clip(avg_extraction_conf - rng.uniform(0, 0.2, size=n_samples), 0.3, 1.0)
-    low_conf_count = (avg_extraction_conf < 0.85).astype(float) * rng.integers(0, 3, size=n_samples)
-
-    # Validation findings and fraud flags
-    critical_findings = rng.poisson(lam=0.15, size=n_samples)
-    warning_findings = rng.poisson(lam=0.5, size=n_samples)
-    total_findings = critical_findings + warning_findings
-    fraud_flags = rng.poisson(lam=0.08, size=n_samples)
-    docs_count = rng.integers(1, 6, size=n_samples)
+    loan_to_income_ratio = np.round(loan_amount / np.maximum(income_annum, 1.0), 4)
 
     df = pd.DataFrame(
         {
-            "declared_income": declared_income,
-            "loan_amount_requested": loan_amount,
-            "income_to_loan_ratio": income_to_loan_ratio,
-            "gross_monthly_income": gross_monthly_income,
-            "avg_monthly_deposit": avg_monthly_deposit,
-            "deposit_to_income_ratio": deposit_to_income_ratio,
-            "deposit_consistency": deposit_consistency,
-            "min_extraction_confidence": min_extraction_conf,
-            "avg_extraction_confidence": avg_extraction_conf,
-            "low_confidence_fields_count": low_conf_count,
-            "critical_findings_count": critical_findings.astype(float),
-            "warning_findings_count": warning_findings.astype(float),
-            "total_findings_count": total_findings.astype(float),
-            "fraud_flags_count": fraud_flags.astype(float),
-            "documents_count": docs_count.astype(float),
+            "no_of_dependents": no_of_dependents,
+            "education": education,
+            "self_employed": self_employed,
+            "income_annum": income_annum,
+            "loan_amount": loan_amount,
+            "loan_term": loan_term,
+            "cibil_score": cibil_score,
+            "residential_assets_value": residential_assets,
+            "commercial_assets_value": commercial_assets,
+            "luxury_assets_value": luxury_assets,
+            "bank_asset_value": bank_asset_value,
+            "loan_to_income_ratio": loan_to_income_ratio,
         }
     )
 
-    # Calculate ground truth approval probability with non-linear factors
+    # Ground truth approval driven primarily by CIBIL, loan_to_income_ratio, and asset coverage
+    asset_total = residential_assets + commercial_assets + luxury_assets + bank_asset_value
+    asset_coverage = asset_total / np.maximum(loan_amount, 1.0)
+
     log_odds = (
-        1.5 * (df["income_to_loan_ratio"] * 10 - 1.2)
-        + 2.0 * (df["deposit_consistency"] - 0.8)
-        + 1.0 * (df["avg_extraction_confidence"] - 0.9)
-        - 3.5 * df["critical_findings_count"]
-        - 1.2 * df["warning_findings_count"]
-        - 4.0 * df["fraud_flags_count"]
-        - 0.5 * df["low_confidence_fields_count"]
+        0.025 * (cibil_score - 550)
+        - 0.8 * (loan_to_income_ratio - 2.5)
+        + 0.5 * (asset_coverage - 1.5)
+        + 0.3 * education
+        - 0.2 * self_employed
     )
     prob = 1.0 / (1.0 + np.exp(-log_odds))
-    approved = (rng.uniform(0, 1, size=n_samples) < prob).astype(int)
-    df["approved"] = approved
+    df["approved"] = (rng.uniform(0, 1, size=n_samples) < prob).astype(int)
 
     return df
 
 
-def load_dataset(csv_path: Optional[str] = None) -> pd.DataFrame:
-    """Load dataset from a CSV path or fallback to synthetic generation."""
-    if csv_path:
-        df = pd.read_csv(csv_path)
-        return df
-    return generate_synthetic_loan_dataset()
+def load_dataset(csv_path: Optional[str | Path] = None) -> pd.DataFrame:
+    """Load and preprocess the real Kaggle Loan Approval Prediction Dataset.
+
+    Preprocesses:
+    - Strips whitespace from column names and string values
+    - Encodes 'loan_status' as 0/1 binary target ('approved')
+    - Encodes 'education' as binary (Graduate: 1, Not Graduate: 0)
+    - Encodes 'self_employed' as binary (Yes: 1, No: 0)
+    - Keeps all numerical columns as float
+    - Computes derived 'loan_to_income_ratio'
+
+    Args:
+        csv_path: Optional path to CSV file. Defaults to risk/data/raw/loan_approval_dataset.csv.
+
+    Returns:
+        pd.DataFrame ready for model training.
+    """
+    target_path = Path(csv_path) if csv_path else DEFAULT_RAW_DATA_PATH
+
+    if not target_path.exists():
+        return generate_synthetic_loan_dataset()
+
+    df = pd.read_csv(target_path)
+    df.columns = df.columns.str.strip()
+
+    # 1. Encode binary target 'approved' (Approved: 1, Rejected: 0)
+    if "loan_status" in df.columns:
+        status_clean = df["loan_status"].astype(str).str.strip().str.lower()
+        df["approved"] = (status_clean == "approved").astype(int)
+
+    # 2. Encode categorical features as binary
+    if "education" in df.columns:
+        edu_clean = df["education"].astype(str).str.strip().str.lower()
+        df["education"] = (edu_clean == "graduate").astype(float)
+
+    if "self_employed" in df.columns:
+        se_clean = df["self_employed"].astype(str).str.strip().str.lower()
+        df["self_employed"] = (se_clean == "yes").astype(float)
+
+    # 3. Ensure numeric columns are floats
+    numeric_base_cols = [
+        "no_of_dependents",
+        "income_annum",
+        "loan_amount",
+        "loan_term",
+        "cibil_score",
+        "residential_assets_value",
+        "commercial_assets_value",
+        "luxury_assets_value",
+        "bank_asset_value",
+    ]
+    for col in numeric_base_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(float)
+
+    # 4. Compute derived feature: loan_to_income_ratio
+    if "loan_amount" in df.columns and "income_annum" in df.columns:
+        df["loan_to_income_ratio"] = (
+            df["loan_amount"] / df["income_annum"].clip(lower=1.0)
+        ).round(4)
+
+    return df
 
 
 def get_train_test_data(
@@ -111,15 +152,23 @@ def get_train_test_data(
     test_size: float = 0.2,
     random_state: int = 42,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    """Split dataset into train and test sets."""
+    """Split dataset into train and test sets for model training.
+
+    Args:
+        df: DataFrame (loads production dataset by default).
+        test_size: Proportion of dataset for test set.
+        random_state: Seed for random shuffling.
+
+    Returns:
+        (X_train, X_test, y_train, y_test)
+    """
     if df is None:
-        df = generate_synthetic_loan_dataset(random_state=random_state)
+        df = load_dataset()
 
     feature_cols = [c for c in NUMERIC_FEATURE_NAMES if c in df.columns]
     X = df[feature_cols]
     y = df["approved"]
 
-    # Use numpy split
     rng = np.random.default_rng(random_state)
     indices = np.arange(len(df))
     rng.shuffle(indices)

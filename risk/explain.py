@@ -10,10 +10,12 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from risk.features import NUMERIC_FEATURE_NAMES
+
 
 def compute_factor_breakdown(
     model: Any,
-    feature_dict: Dict[str, float],
+    feature_dict: Dict[str, Any],
     feature_names: Optional[List[str]] = None,
     top_n: int = 5,
 ) -> List[Dict[str, Any]]:
@@ -30,9 +32,13 @@ def compute_factor_breakdown(
         sorted by descending absolute contribution.
     """
     estimator = getattr(model, "estimator", model)
-    names = feature_names or getattr(model, "feature_names", list(feature_dict.keys()))
+    raw_names = feature_names or getattr(model, "feature_names", NUMERIC_FEATURE_NAMES)
+    names = [n for n in raw_names if n in NUMERIC_FEATURE_NAMES]
 
-    df_sample = pd.DataFrame([[feature_dict.get(k, 0.0) for k in names]], columns=names)
+    # Convert to numeric DataFrame row
+    df_sample = pd.DataFrame(
+        [[float(feature_dict.get(k, 0.0)) for k in names]], columns=names
+    )
 
     factors: List[Dict[str, Any]] = []
 
@@ -59,28 +65,26 @@ def compute_factor_breakdown(
             for feat, val in zip(names, vals):
                 factors.append({"feature": feat, "contribution": round(float(val), 4)})
         except Exception:
-            # Fallback if SHAP fails on mock/linear model
+            # Fallback if SHAP fails or model is heuristic
             factors = []
 
     # 2. Fallback heuristic contribution calculation if SHAP is not available or model untrained
     if not factors:
-        # Calculate domain-driven contribution heuristics
-        income_to_loan = feature_dict.get("income_to_loan_ratio", 0.1)
-        consistency = feature_dict.get("deposit_consistency", 0.9)
-        fraud = feature_dict.get("fraud_flags_count", 0.0)
-        critical = feature_dict.get("critical_findings_count", 0.0)
-        conf_min = feature_dict.get("min_extraction_confidence", 0.9)
+        cibil = float(feature_dict.get("cibil_score", 600.0))
+        loan_to_income = float(feature_dict.get("loan_to_income_ratio", 2.0))
+        income = float(feature_dict.get("income_annum", 500000.0))
+        loan_amt = float(feature_dict.get("loan_amount", 1000000.0))
+        bank_assets = float(feature_dict.get("bank_asset_value", 500000.0))
 
         heuristic_contributions = {
-            "income_to_loan_ratio": round((income_to_loan - 0.15) * 1.5, 4),
-            "deposit_consistency": round((consistency - 0.85) * 1.0, 4),
-            "fraud_flags_count": round(-0.45 * fraud, 4) if fraud > 0 else 0.0,
-            "critical_findings_count": round(-0.35 * critical, 4) if critical > 0 else 0.0,
-            "id_confidence_low": round(-0.15 * (1.0 - conf_min), 4) if conf_min < 0.8 else 0.05,
+            "cibil_score": round((cibil - 600.0) / 300.0, 4),
+            "loan_to_income_ratio": round(-(loan_to_income - 2.5) * 0.15, 4),
+            "bank_asset_value": round((bank_assets - (income * 0.5)) / max(income, 1.0) * 0.1, 4),
+            "loan_amount": round(-(loan_amt - 1000000.0) / 10000000.0, 4),
         }
 
         for feat, contrib in heuristic_contributions.items():
-            if abs(contrib) > 0.001:
+            if abs(contrib) > 0.0001:
                 factors.append({"feature": feat, "contribution": contrib})
 
     # Sort factors by absolute contribution descending (most influential first)

@@ -1,7 +1,8 @@
 """Feature extraction and engineering for loan risk assessment.
 
-Extracts numerical and categorical features from a loan_file dictionary
-and ensures protected attributes are strictly excluded from the feature space.
+Extracts numerical features matching the Kaggle Loan Approval Prediction Dataset
+from loan_file dictionaries, defaulting unextracted fields with documented medians
+and ensuring protected demographic attributes are strictly excluded.
 """
 
 from __future__ import annotations
@@ -26,104 +27,174 @@ PROTECTED_ATTRIBUTES: Set[str] = {
     "disability",
 }
 
-# Standard feature names in exact model order
+# Standard feature names in exact model order (matching Kaggle Loan Approval dataset)
 NUMERIC_FEATURE_NAMES: List[str] = [
-    "declared_income",
-    "loan_amount_requested",
-    "income_to_loan_ratio",
-    "gross_monthly_income",
-    "avg_monthly_deposit",
-    "deposit_to_income_ratio",
-    "deposit_consistency",
-    "min_extraction_confidence",
-    "avg_extraction_confidence",
-    "low_confidence_fields_count",
-    "critical_findings_count",
-    "warning_findings_count",
-    "total_findings_count",
-    "fraud_flags_count",
-    "documents_count",
+    "no_of_dependents",
+    "education",
+    "self_employed",
+    "income_annum",
+    "loan_amount",
+    "loan_term",
+    "cibil_score",
+    "residential_assets_value",
+    "commercial_assets_value",
+    "luxury_assets_value",
+    "bank_asset_value",
+    "loan_to_income_ratio",
 ]
 
+# Documented default/median values from training data for fields without live pipeline equivalents
+DEFAULT_FEATURE_VALUES: Dict[str, float] = {
+    "no_of_dependents": 2.0,
+    "education": 1.0,  # 1 = Graduate, 0 = Not Graduate
+    "self_employed": 0.0,  # 1 = Yes, 0 = No
+    "loan_term": 10.0,  # Median loan term in years
+    "cibil_score": 600.0,  # Median CIBIL credit score
+    "residential_assets_value": 5600000.0,  # Median residential asset value
+    "commercial_assets_value": 3700000.0,  # Median commercial asset value
+    "luxury_assets_value": 14600000.0,  # Median luxury asset value
+    "bank_asset_value": 4600000.0,  # Median bank asset value
+}
 
-def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, float]:
-    """Extract engineered numerical features from a validated loan file.
+
+def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract model features from a validated loan file.
+
+    For fields with live pipeline equivalents (income_annum, loan_amount, bank_asset_value),
+    values are extracted from applicant metadata and extracted_fields.
+    For fields with no live pipeline equivalent (cibil_score, asset values, loan_term),
+    documented training medians are used and recorded in 'data_completeness_note'.
 
     Args:
         loan_file: Dictionary following loan_file.schema.json
 
     Returns:
-        Dictionary mapping feature name to float value.
+        Dictionary containing all numerical features plus 'data_completeness_note'.
     """
     applicant = loan_file.get("applicant") or {}
     declared_income = float(applicant.get("declared_income") or 0.0)
     loan_amount = float(applicant.get("loan_amount_requested") or 0.0)
 
-    # Calculate basic income-to-loan ratio
-    income_to_loan_ratio = declared_income / max(loan_amount, 1.0)
+    # In loanIQ, monthly incomes are standard; convert to annual if monthly (< 1,000,000)
+    income_annum = declared_income * 12.0 if 0 < declared_income < 1000000 else declared_income
 
-    # Parse extracted fields
     extracted_fields = loan_file.get("extracted_fields") or []
-    gross_monthly_income = declared_income
-    avg_monthly_deposit = declared_income
-
-    confidences: List[float] = []
-    low_conf_count = 0
+    extracted_map: Dict[str, Any] = {}
 
     for field in extracted_fields:
-        name = field.get("field_name", "")
-        conf = float(field.get("confidence", 1.0))
-        confidences.append(conf)
-
-        if field.get("needs_review") or conf < 0.8:
-            low_conf_count += 1
-
+        name = field.get("field_name", "").strip().lower()
         val = field.get("value")
+        extracted_map[name] = val
+
         if name == "gross_monthly_income" and isinstance(val, (int, float)):
-            gross_monthly_income = float(val)
-        elif name == "avg_monthly_deposit" and isinstance(val, (int, float)):
-            avg_monthly_deposit = float(val)
+            income_annum = float(val) * 12.0
+        elif name == "annual_income" and isinstance(val, (int, float)):
+            income_annum = float(val)
+        elif name == "loan_amount" and isinstance(val, (int, float)):
+            loan_amount = float(val)
 
-    # Deposit vs income consistency
-    deposit_to_income_ratio = (
-        avg_monthly_deposit / max(gross_monthly_income, 1.0)
-        if gross_monthly_income > 0
-        else 1.0
-    )
-    denom = max(gross_monthly_income, avg_monthly_deposit, 1.0)
-    deposit_consistency = max(0.0, 1.0 - (abs(gross_monthly_income - avg_monthly_deposit) / denom))
+    # Track fields that were defaulted
+    defaulted_fields: List[str] = []
 
-    min_conf = min(confidences) if confidences else 1.0
-    avg_conf = (sum(confidences) / len(confidences)) if confidences else 1.0
+    # 1. no_of_dependents
+    if "no_of_dependents" in extracted_map and isinstance(extracted_map["no_of_dependents"], (int, float)):
+        no_of_dependents = float(extracted_map["no_of_dependents"])
+    elif "dependents" in extracted_map and isinstance(extracted_map["dependents"], (int, float)):
+        no_of_dependents = float(extracted_map["dependents"])
+    else:
+        no_of_dependents = DEFAULT_FEATURE_VALUES["no_of_dependents"]
+        defaulted_fields.append("no_of_dependents")
 
-    # Parse validation findings and fraud flags
-    validation_findings = loan_file.get("validation_findings") or []
-    critical_count = sum(1 for vf in validation_findings if vf.get("severity") == "critical")
-    warning_count = sum(1 for vf in validation_findings if vf.get("severity") == "warning")
-    total_findings = len(validation_findings)
+    # 2. education (1: Graduate, 0: Not Graduate)
+    if "education" in extracted_map:
+        edu_str = str(extracted_map["education"]).strip().lower()
+        education = 1.0 if "grad" in edu_str else 0.0
+    else:
+        education = DEFAULT_FEATURE_VALUES["education"]
+        defaulted_fields.append("education")
 
-    fraud_flags = loan_file.get("fraud_flags") or []
-    fraud_count = len(fraud_flags)
+    # 3. self_employed (1: Yes, 0: No)
+    if "self_employed" in extracted_map:
+        se_str = str(extracted_map["self_employed"]).strip().lower()
+        self_employed = 1.0 if se_str in ("yes", "true", "1") else 0.0
+    elif "employment_type" in extracted_map:
+        emp_type = str(extracted_map["employment_type"]).strip().lower()
+        self_employed = 1.0 if "self" in emp_type or "business" in emp_type else 0.0
+    else:
+        self_employed = DEFAULT_FEATURE_VALUES["self_employed"]
+        defaulted_fields.append("self_employed")
 
-    documents = loan_file.get("documents") or []
-    doc_count = len(documents)
+    # 4. loan_term
+    if "loan_term" in extracted_map and isinstance(extracted_map["loan_term"], (int, float)):
+        loan_term = float(extracted_map["loan_term"])
+    elif "tenure_years" in extracted_map and isinstance(extracted_map["tenure_years"], (int, float)):
+        loan_term = float(extracted_map["tenure_years"])
+    else:
+        loan_term = DEFAULT_FEATURE_VALUES["loan_term"]
+        defaulted_fields.append("loan_term")
+
+    # 5. cibil_score
+    if "cibil_score" in extracted_map and isinstance(extracted_map["cibil_score"], (int, float)):
+        cibil_score = float(extracted_map["cibil_score"])
+    elif "credit_score" in extracted_map and isinstance(extracted_map["credit_score"], (int, float)):
+        cibil_score = float(extracted_map["credit_score"])
+    else:
+        cibil_score = DEFAULT_FEATURE_VALUES["cibil_score"]
+        defaulted_fields.append("cibil_score")
+
+    # 6. bank_asset_value (pull from avg_monthly_deposit if available)
+    if "avg_monthly_deposit" in extracted_map and isinstance(extracted_map["avg_monthly_deposit"], (int, float)):
+        bank_asset_value = float(extracted_map["avg_monthly_deposit"]) * 12.0
+    elif "bank_asset_value" in extracted_map and isinstance(extracted_map["bank_asset_value"], (int, float)):
+        bank_asset_value = float(extracted_map["bank_asset_value"])
+    else:
+        bank_asset_value = DEFAULT_FEATURE_VALUES["bank_asset_value"]
+        defaulted_fields.append("bank_asset_value")
+
+    # 7. Asset values
+    if "residential_assets_value" in extracted_map and isinstance(extracted_map["residential_assets_value"], (int, float)):
+        residential_assets = float(extracted_map["residential_assets_value"])
+    else:
+        residential_assets = DEFAULT_FEATURE_VALUES["residential_assets_value"]
+        defaulted_fields.append("residential_assets_value")
+
+    if "commercial_assets_value" in extracted_map and isinstance(extracted_map["commercial_assets_value"], (int, float)):
+        commercial_assets = float(extracted_map["commercial_assets_value"])
+    else:
+        commercial_assets = DEFAULT_FEATURE_VALUES["commercial_assets_value"]
+        defaulted_fields.append("commercial_assets_value")
+
+    if "luxury_assets_value" in extracted_map and isinstance(extracted_map["luxury_assets_value"], (int, float)):
+        luxury_assets = float(extracted_map["luxury_assets_value"])
+    else:
+        luxury_assets = DEFAULT_FEATURE_VALUES["luxury_assets_value"]
+        defaulted_fields.append("luxury_assets_value")
+
+    # Derived feature: loan_to_income_ratio
+    loan_to_income_ratio = loan_amount / max(income_annum, 1.0)
+
+    # Completeness note
+    if defaulted_fields:
+        data_completeness_note = (
+            f"Features defaulted from training dataset medians: {', '.join(defaulted_fields)}"
+        )
+    else:
+        data_completeness_note = "All features extracted from live pipeline data."
 
     return {
-        "declared_income": declared_income,
-        "loan_amount_requested": loan_amount,
-        "income_to_loan_ratio": round(income_to_loan_ratio, 4),
-        "gross_monthly_income": gross_monthly_income,
-        "avg_monthly_deposit": avg_monthly_deposit,
-        "deposit_to_income_ratio": round(deposit_to_income_ratio, 4),
-        "deposit_consistency": round(deposit_consistency, 4),
-        "min_extraction_confidence": round(min_conf, 4),
-        "avg_extraction_confidence": round(avg_conf, 4),
-        "low_confidence_fields_count": float(low_conf_count),
-        "critical_findings_count": float(critical_count),
-        "warning_findings_count": float(warning_count),
-        "total_findings_count": float(total_findings),
-        "fraud_flags_count": float(fraud_count),
-        "documents_count": float(doc_count),
+        "no_of_dependents": float(no_of_dependents),
+        "education": float(education),
+        "self_employed": float(self_employed),
+        "income_annum": float(income_annum),
+        "loan_amount": float(loan_amount),
+        "loan_term": float(loan_term),
+        "cibil_score": float(cibil_score),
+        "residential_assets_value": float(residential_assets),
+        "commercial_assets_value": float(commercial_assets),
+        "luxury_assets_value": float(luxury_assets),
+        "bank_asset_value": float(bank_asset_value),
+        "loan_to_income_ratio": round(float(loan_to_income_ratio), 4),
+        "data_completeness_note": data_completeness_note,
     }
 
 
