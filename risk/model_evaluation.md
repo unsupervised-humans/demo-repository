@@ -141,12 +141,10 @@ The selection of XGBoost over Logistic Regression is justified across multiple n
 > [!WARNING]
 > **Production Inference Gap:** The offline 99.65% test accuracy relies heavily on bureau credit scores that are not yet available in the live document extraction pipeline.
 
-1. **SHAP Contribution Disparity:** Across all tested applications, SHAP feature importance confirms that `cibil_score` contributes **3x to 10x more** to the model's log-odds output than any other single feature (e.g., $|\text{SHAP}| \approx 4.1 - 5.9$ for CIBIL vs. $0.4 - 1.9$ for asset values and loan ratios).
-2. **Missing Live Pipeline Bureau Integration:** In the current live LoanIQ pipeline, upstream document extraction agents process payslips, bank statements, and KYC documents, but do not produce a credit bureau score. Consequently, `cibil_score` is defaulted to the training-set median (`600.0`) at inference time for every live applicant.
-3. **Implications for Live Predictive Signal:** Because the single dominant driver is held constant across all live applications, the model's true predictive signal in production is substantially weaker than the 99.65% offline test accuracy suggests. Live decisions rely on the remaining secondary signals (`income_annum`, `loan_to_income_ratio`, `bank_asset_value`, and asset coverage).
-4. **Operational Recommendation:**
-   - Treat live `approval_probability` outputs as **directionally useful risk rankings** (ranking relative creditworthiness based on income, assets, and loan terms) rather than as calibrated absolute probabilities, until a real credit bureau integration is available.
-   - Downstream policy layers and human reviewers should weigh cross-document validation findings, bank deposit consistency, and fraud flags alongside the risk score.
+1. **SHAP Dominance Across Test Cases:** SHAP analysis across multiple test cases (see [`risk/samples/`](file:///c:/Users/rohit/Downloads/loanIQ/risk/samples/)) shows `cibil_score` contributes **3-10x more** to the model's output than any other single feature — it is the dominant driver of `approval_probability`.
+2. **Missing Live Pipeline Bureau Data:** `cibil_score` is **NOT** available in the live LoanIQ pipeline, since Austin's document extraction and Alina's validation do not produce a credit bureau score from payslips, bank statements, or KYC documents. It is therefore defaulted to the training-set median (`600.0`) for every live applicant.
+3. **Practical Consequence:** Because the model's single most influential feature is held constant (at the training median) for every real application, the model's true discriminative power in live production is substantially weaker than the 99.65% offline test accuracy suggests. Live predictions should be treated as directionally indicative of relative risk (based on income, assets, and loan terms) rather than as precisely calibrated probabilities.
+4. **Recommendation:** If a real credit bureau data source becomes available in a future iteration, `cibil_score` should be sourced live rather than defaulted, which would substantially improve real-world model reliability.
 
 ---
 
