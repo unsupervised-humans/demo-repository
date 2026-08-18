@@ -36,7 +36,7 @@ except ImportError as exc:
 
 from orchestrator.graph import run_pipeline
 from orchestrator.reviewer.qa import ask_question
-from orchestrator.state import initialize_loan_file
+from orchestrator.state import apply_reviewer_decision, initialize_loan_file
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,11 @@ async def api_upload_pipeline(
             }
 
         # run_from_files: ingestion (classify) → extraction → validation → risk → …
-        result = run_from_files(tmp_dir, application_id=loan_file["application_id"])
+        result = run_from_files(
+            tmp_dir,
+            application_id=loan_file["application_id"],
+            applicant=loan_file.get("applicant"),
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -220,8 +224,13 @@ async def api_upload_pipeline(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
     # Merge applicant info back if the pipeline didn't set it
-    if applicant_name and not result.get("applicant", {}).get("name"):
-        result.setdefault("applicant", {})["name"] = applicant_name
+    result.setdefault("applicant", {})
+    if applicant_name and not result["applicant"].get("name"):
+        result["applicant"]["name"] = applicant_name
+    if loan_amount and not result["applicant"].get("loan_amount_requested"):
+        result["applicant"]["loan_amount_requested"] = loan_amount
+    if loan_type and not result["applicant"].get("loan_type"):
+        result["applicant"]["loan_type"] = loan_type
 
     app_id = result["application_id"]
     _loan_files[app_id] = result
@@ -294,31 +303,16 @@ async def api_submit_decision(
             detail=f"Invalid decision. Must be one of: {valid_decisions}",
         )
 
-    from datetime import datetime, timezone
-
     lf = _loan_files[app_id]
-    lf["reviewer_decision"] = {
-        "decision": request.decision,
-        "reviewer": request.reviewer,
-        "decided_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "notes": request.notes,
-    }
-
-    # Update status based on decision
-    status_map = {
-        "approved": "approved",
-        "rejected": "rejected",
-        "more_docs_requested": "more_docs_requested",
-    }
-    lf["status"] = status_map[request.decision]
-
-    # Audit
-    from orchestrator.audit import append_audit
-    append_audit(
-        lf,
-        f"human review completed: {request.decision} by {request.reviewer}",
-        agent="reviewer",
-    )
+    try:
+        apply_reviewer_decision(
+            lf,
+            decision=request.decision,
+            reviewer=request.reviewer,
+            notes=request.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return {
         "application_id": app_id,

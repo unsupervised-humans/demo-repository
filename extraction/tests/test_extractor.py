@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from extraction.extractor import AGENT_NAME, extract_fields
+from orchestrator.graph import _promote_applicant_name
 
 
 # ── Test helpers ──────────────────────────────────────────────────────────────
@@ -374,3 +375,24 @@ class TestReasoningModelOutput:
         assert fields[0]["value"] == "Reasoning LLC"
         assert fields[0]["confidence"] == pytest.approx(0.95)
         assert fields[0]["needs_review"] is False
+
+
+class TestApplicantNamePromotion:
+    def test_promotes_name_from_extracted_fields(self):
+        loan_file = {
+            "applicant": {"name": "Unknown"},
+            "extracted_fields": [
+                {
+                    "field_name": "applicant_name",
+                    "value": "Priya Menon",
+                    "confidence": 0.96,
+                    "needs_review": False,
+                }
+            ],
+            "audit_log": [],
+        }
+
+        _promote_applicant_name(loan_file)
+
+        assert loan_file["applicant"]["name"] == "Priya Menon"
+        assert any("applicant name populated" in entry["action"] for entry in loan_file["audit_log"])

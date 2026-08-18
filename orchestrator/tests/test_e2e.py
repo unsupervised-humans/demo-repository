@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from orchestrator.graph import run_pipeline
+from orchestrator.state import apply_reviewer_decision
 
 
 def _load_example():
@@ -163,3 +164,31 @@ class TestEndToEnd:
             "approved", "rejected",
         }
         assert result["status"] in valid_statuses
+
+
+def test_duplicate_reviewer_decision_is_rejected():
+    loan_file = {
+        "application_id": "APP-TEST-DUPLICATE",
+        "status": "rejected",
+        "reviewer_decision": {
+            "decision": "rejected",
+            "reviewer": "Alex",
+            "decided_at": "2026-08-18T10:00:00Z",
+            "notes": "",
+        },
+        "audit_log": [],
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        apply_reviewer_decision(
+            loan_file,
+            decision="rejected",
+            reviewer="Alex",
+            notes="",
+        )
+
+    assert "already marked" in str(exc_info.value)
+    assert any(
+        "duplicate human review decision ignored" in entry["action"]
+        for entry in loan_file["audit_log"]
+    )

@@ -7,7 +7,8 @@ Strategy
    (.txt, .md, .csv) just read the file directly.
 2. If it is a PDF, try to extract embedded text with pdfminer.six.
 3. If it is an image (PNG, JPG, TIFF, BMP, WEBP) try pytesseract OCR.
-4. If any dependency is missing, log a warning and return None so the
+4. If the PDF is image-based, render pages and OCR them with pytesseract.
+5. If any dependency is missing, log a warning and return None so the
    caller falls back to passing the raw file as a base64 image to Grok.
 
 None is returned whenever text extraction is impossible or yields less
@@ -20,12 +21,14 @@ base64-encoded image is sent to the model.
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 MIN_TEXT_CHARS = 50  # below this we treat the file as image-only
+MAX_PDF_OCR_PAGES = 5
 
 
 def extract_text(file_path: str | Path) -> Optional[str]:
@@ -78,6 +81,7 @@ def _pdf_text(path: Path) -> Optional[str]:
     Strategy:
     1. PyMuPDF (fitz) -- best layout preservation for structured docs.
     2. pdfminer.six -- fallback if PyMuPDF is not installed.
+    3. OCR rendered PDF pages when embedded text is missing or unusable.
     """
     # --- PyMuPDF (preferred) ---
     try:
@@ -108,16 +112,53 @@ def _pdf_text(path: Path) -> Optional[str]:
         if text and len(text.strip()) >= MIN_TEXT_CHARS:
             return text.strip()
         logger.debug("OCR fallback: PDF has no embedded text or too short: %s", path)
-        return None
     except ImportError:
         logger.warning(
             "pdfminer.six not installed; cannot extract PDF text. "
             "Install with: pip install pdfminer.six"
         )
-        return None
     except Exception as exc:  # noqa: BLE001
         logger.warning("OCR fallback: pdfminer failed for %s: %s", path, exc)
+    ocr_text = _ocr_pdf_pages(path)
+    if ocr_text:
+        return ocr_text
+    return None
+
+
+def _ocr_pdf_pages(path: Path) -> Optional[str]:
+    """Render PDF pages to images and OCR them."""
+    try:
+        import fitz  # type: ignore
+        from PIL import Image  # type: ignore
+        import pytesseract  # type: ignore
+    except ImportError:
+        logger.warning(
+            "PyMuPDF/Pillow/pytesseract not fully installed; cannot OCR scanned PDF %s",
+            path,
+        )
         return None
+
+    try:
+        doc = fitz.open(str(path))
+        page_text: list[str] = []
+        for page_index, page in enumerate(doc):
+            if page_index >= MAX_PDF_OCR_PAGES:
+                break
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            image = Image.open(BytesIO(pix.tobytes("png")))
+            text = pytesseract.image_to_string(image).strip()
+            if text:
+                page_text.append(text)
+        doc.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("OCR fallback: rendered PDF OCR failed for %s: %s", path, exc)
+        return None
+
+    combined = "\n\n".join(page_text).strip()
+    if len(combined) >= MIN_TEXT_CHARS:
+        return combined
+    logger.debug("OCR fallback: rendered PDF OCR extracted too little text from %s", path)
+    return None
 
 
 # ── Image OCR helpers ─────────────────────────────────────────────────────────

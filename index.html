@@ -55,6 +55,21 @@ header{background:linear-gradient(135deg,rgba(15,23,42,.97) 0%,rgba(8,11,18,.99)
   border:1px solid transparent;margin-bottom:4px;transition:all .2s;position:relative}
 .loan-card:hover{background:var(--surface);border-color:var(--border)}
 .loan-card.active{background:var(--surface2);border-color:var(--accent)}
+.loan-card.loan-approved{background:linear-gradient(90deg,#10b98116,transparent 70%)}
+.loan-card.loan-rejected{background:linear-gradient(90deg,#ef444416,transparent 70%)}
+.loan-card.loan-more-docs{background:linear-gradient(90deg,#f59e0b16,transparent 70%)}
+.loan-card.loan-approved .lc-name{color:#86efac}
+.loan-card.loan-rejected .lc-name{color:#fca5a5}
+.loan-card.loan-more-docs .lc-name{color:#fcd34d}
+.loan-card.loan-approved .lc-prob{color:#6ee7b7}
+.loan-card.loan-rejected .lc-prob{color:#fda4af}
+.loan-card.loan-more-docs .lc-prob{color:#fbbf24}
+.loan-card.loan-approved::after,.loan-card.loan-rejected::after,.loan-card.loan-more-docs::after{
+  content:'';position:absolute;left:14px;right:14px;bottom:8px;height:3px;border-radius:999px;opacity:.95
+}
+.loan-card.loan-approved::after{background:linear-gradient(90deg,#10b981,#34d399)}
+.loan-card.loan-rejected::after{background:linear-gradient(90deg,#ef4444,#f87171)}
+.loan-card.loan-more-docs::after{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
 .loan-card.active::before{content:'';position:absolute;left:0;top:10%;height:80%;
   width:3px;background:var(--accent);border-radius:0 2px 2px 0}
 .lc-id{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text3);margin-bottom:5px}
@@ -405,12 +420,17 @@ async function loadLoanList(){
       const prob=l.approval_probability;
       const probStr=prob!=null?(prob*100).toFixed(0)+'% approval':'Scoring pending';
       const rec=l.recommendation||'';
+      const status=l.status||'pending';
       let bc='badge-pending',rl=l.status||'pending';
       if(rec==='approve'){bc='badge-approve';rl='Approve';}
       else if(rec==='reject'){bc='badge-reject';rl='Reject';}
       else if(rec==='request_more_info'){bc='badge-review';rl='More Info';}
+      const stateClass=
+        status==='approved'?' loan-approved':
+        status==='rejected'?' loan-rejected':
+        status==='more_docs_requested'?' loan-more-docs':'';
       const active=l.application_id===currentAppId?' active':'';
-      return `<div class="loan-card${active}" onclick="selectLoan('${l.application_id}')">
+      return `<div class="loan-card${stateClass}${active}" onclick="selectLoan('${l.application_id}')">
         <div class="lc-id">${l.application_id}</div>
         <div class="lc-name">${l.applicant_name||'Unknown Applicant'}</div>
         <div class="lc-badges"><span class="badge ${bc}">${rl}</span>${l.needs_review?'<span class="badge badge-review">Review</span>':''}</div>
@@ -447,6 +467,8 @@ function renderResult(lf){
   const compliance=lf.compliance||{};
   const reviewReasons=lf._review_reasons||[];
   const auditLog=lf.audit_log||[];
+  const reviewerDecision=lf.reviewer_decision||null;
+  const finalDecisionLocked=!!(reviewerDecision&&['approved','rejected','more_docs_requested'].includes(reviewerDecision.decision));
   const prob=risk.approval_probability;const riskStatus=risk.status;
   const factors=(risk.factors||[]).sort((a,b)=>Math.abs(b.contribution)-Math.abs(a.contribution)).slice(0,6);
   const rec=summary.recommendation||'request_more_info';
@@ -594,12 +616,13 @@ function renderResult(lf){
     <div class="panel">
       <div class="panel-title">Human Decision</div>
       <div class="dec-sub">Override the AI recommendation with your final underwriting decision.</div>
+      ${reviewerDecision?`<div class="rev-item rev-info"><span class="rev-icon">ℹ️</span><span>Current decision: ${(reviewerDecision.decision||'').replace(/_/g,' ')} by ${reviewerDecision.reviewer||'Reviewer'}</span></div>`:''}
       <input class="rev-input" id="reviewer-name" placeholder="Your name / reviewer ID"/>
       <textarea class="rev-input" id="reviewer-notes" placeholder="Notes (optional)" rows="2" style="resize:vertical;margin-top:6px"></textarea>
       <div class="dec-btns">
-        <button class="btn-dec btn-approve" onclick="submitDecision('approved')">✅ Approve</button>
-        <button class="btn-dec btn-reject" onclick="submitDecision('rejected')">❌ Reject</button>
-        <button class="btn-dec btn-more" onclick="submitDecision('more_docs_requested')">📎 Request More</button>
+        <button class="btn-dec btn-approve" onclick="submitDecision('approved')" ${finalDecisionLocked?'disabled':''}>✅ Approve</button>
+        <button class="btn-dec btn-reject" onclick="submitDecision('rejected')" ${finalDecisionLocked?'disabled':''}>❌ Reject</button>
+        <button class="btn-dec btn-more" onclick="submitDecision('more_docs_requested')" ${finalDecisionLocked?'disabled':''}>📎 Request More</button>
       </div>
     </div>
 
@@ -656,14 +679,41 @@ function toggleColl(header){
 
 async function submitDecision(decision){
   if(!currentAppId){showToast('No application selected','error');return;}
+  const currentLoan=allLoans[currentAppId]||{};
+  if(currentLoan.reviewer_decision?.decision){
+    showToast('A final decision is already recorded for this application','error');
+    return;
+  }
   const reviewer=document.getElementById('reviewer-name')?.value?.trim()||'Reviewer';
   const notes=document.getElementById('reviewer-notes')?.value?.trim()||'';
+  const buttons=Array.from(document.querySelectorAll('.btn-dec'));
+  buttons.forEach(b=>b.disabled=true);
   try{const r=await fetch(API+'/api/review/'+currentAppId+'/decision',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,reviewer,notes})});
-    if(!r.ok)throw new Error(await r.text());
+    if(!r.ok){
+      let msg='Request failed';
+      try{
+        const err=await r.json();
+        msg=err.detail||JSON.stringify(err);
+      }catch{
+        msg=await r.text();
+      }
+      throw new Error(msg);
+    }
     const dl={approved:'Approved ✅',rejected:'Rejected ❌',more_docs_requested:'More docs requested 📎'};
-    showToast('Decision recorded: '+(dl[decision]||decision),'success');await loadLoanList();}
+    const fr=await fetch(API+'/api/pipeline/'+currentAppId+'/result');
+    const full=await fr.json();
+    allLoans[currentAppId]=full;
+    showToast('Decision recorded: '+(dl[decision]||decision),'success');
+    await loadLoanList();
+    renderResult(full);}
   catch(e){showToast('Failed: '+e.message,'error');}
+  finally{
+    const latest=allLoans[currentAppId]||{};
+    if(!(latest.reviewer_decision&&latest.reviewer_decision.decision)){
+      buttons.forEach(b=>b.disabled=false);
+    }
+  }
 }
 
 function showToast(msg,type='info'){
