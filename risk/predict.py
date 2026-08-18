@@ -71,6 +71,10 @@ class RiskScoringAgent:
                 "status": "INSUFFICIENT_DATA",
                 "reason": reason,
                 "data_completeness_note": features.get("data_completeness_note", ""),
+                "feature_snapshot": {
+                    key: value for key, value in features.items() if not str(key).startswith("_")
+                },
+                "defaulted_fields": list(features.get("_defaulted_fields", [])),
             }
 
         # --- Normal scoring path ---
@@ -87,6 +91,10 @@ class RiskScoringAgent:
             "factors": factors,
             "status": "ok",
             "data_completeness_note": features.get("data_completeness_note", ""),
+            "feature_snapshot": {
+                key: value for key, value in features.items() if not str(key).startswith("_")
+            },
+            "defaulted_fields": list(features.get("_defaulted_fields", [])),
         }
 
 
