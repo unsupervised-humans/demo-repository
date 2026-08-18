@@ -81,6 +81,41 @@ class TestNormalizer:
 
         assert result.status == IngestionStatus.EMPTY
 
+    def test_scanned_pdf(self):
+        """A 'scanned' PDF has no real text layer -- it's just an image
+        embedded on a page. Normalization only cares about file structure
+        (valid PDF, page count), not content, so this must pass exactly
+        like a text-based PDF."""
+        import io
+
+        from PIL import Image, ImageDraw
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
+
+        img = Image.new("RGB", (600, 800), color="white")
+        draw = ImageDraw.Draw(img)
+        draw.rectangle([50, 50, 550, 750], outline="black", width=2)
+        img_buf = io.BytesIO()
+        img.save(img_buf, format="PNG")
+        img_buf.seek(0)
+
+        pdf_buf = io.BytesIO()
+        c = canvas.Canvas(pdf_buf, pagesize=letter)
+        c.drawImage(ImageReader(img_buf), 50, 50, width=500, height=650)
+        c.showPage()
+        c.save()
+        scanned_pdf_bytes = pdf_buf.getvalue()
+
+        norm = Normalizer()
+        raw = RawFile(file_name="scanned_id.pdf", file_bytes=scanned_pdf_bytes)
+
+        result = norm.normalize(raw)
+
+        assert result.status == IngestionStatus.OK
+        assert result.mime_type == "application/pdf"
+        assert result.page_count == 1
+
     def test_oversized_file_rejected(self):
         norm = Normalizer(max_file_size_bytes=10)
         raw = RawFile(file_name="big.pdf", file_bytes=b"%PDF-1.4" + b"x" * 100)
@@ -143,6 +178,47 @@ class TestIngestionPipeline:
         assert len(results) == 2
         assert results[0].status == IngestionStatus.OK
         assert results[1].status == IngestionStatus.CORRUPTED
+
+    def test_unknown_document_type(self):
+        """A document the classifier can't confidently place should still
+        produce a valid documents[] entry with type 'unknown', not an
+        error or a dropped record."""
+        pipeline = self._pipeline_with_stub_classifier(
+            doc_type=DocumentType.UNKNOWN, confidence=0.2
+        )
+        raw = RawFile(file_name="mystery.png", file_bytes=self._minimal_png())
+
+        result = pipeline.ingest_one(raw)
+
+        assert result.status == IngestionStatus.OK
+        assert result.document_type == DocumentType.UNKNOWN
+
+    def test_fraud_synthetic_documents_ingest_successfully(self, synthetic_docs):
+        """Fraud/tampered documents are structurally valid files -- the
+        tampering is in the content (names, numbers, dates), which is
+        Alina's validation/fraud layer's job to catch, not ingestion's.
+        Ingestion must still classify and pass them through as normal
+        documents[] entries."""
+        fraud_docs = [d for d in synthetic_docs if d.category == "fraud"]
+        assert len(fraud_docs) == 6  # sanity check against the spec's list
+
+        pipeline = self._pipeline_with_stub_classifier(doc_type=DocumentType.PAYSLIP)
+        raws = [RawFile(file_name=d.file_name, file_bytes=d.file_bytes) for d in fraud_docs]
+
+        results = pipeline.ingest_batch(raws)
+
+        assert len(results) == len(fraud_docs)
+        for result in results:
+            assert result.status == IngestionStatus.OK
+            assert result.error is None
+
+    def _minimal_png(self) -> bytes:
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+            b"\x00\x00\x00\nIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x01\xa5\xf6E\xed"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
 
     def test_to_loan_file_documents_shape(self, synthetic_docs):
         pipeline = self._pipeline_with_stub_classifier()
