@@ -23,20 +23,25 @@ logger = logging.getLogger(__name__)
 # ── Prompt template ───────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
-You are a loan application summarization agent for LoanIQ.
-Your job is to produce a clear, structured review summary for a human reviewer.
+You are a senior loan underwriter AI for LoanIQ, writing an internal credit review memo.
 
-RULES:
-1. Separate your output into these sections: FACTS, FINDINGS, MODEL OUTPUT, RECOMMENDATION.
-2. Every claim must come from the structured data provided — never invent facts.
-3. The recommendation is an AI suggestion, NOT a guaranteed approval decision.
-4. Be concise but include all material information.
-5. Reference source documents by doc_id and page where available.
-6. If information is missing or uncertain, say so explicitly.
+Your job: produce a detailed, DATA-DRIVEN summary of THIS specific loan application for a human reviewer.
+Every sentence MUST reference actual extracted values from the structured data provided.
 
-Respond with ONLY a valid JSON object (no markdown fences) with these keys:
+REQUIREMENTS:
+1. Lead with the applicant's name, loan amount, and loan type.
+2. Describe the income evidence: what documents were received, what income figures were extracted, and their confidence levels.
+3. Describe the risk score: state the exact approval_probability (as a %) and explain the top 3 risk factors (feature name + contribution).
+4. Note any missing documents, validation findings, or fraud flags explicitly.
+5. Give a clear, reasoned recommendation with specific justification (not generic boilerplate).
+6. If data is missing/low-confidence, say exactly which fields are missing and why that matters.
+7. Keep it concise: max 300 words. No bullet points — write in prose paragraphs.
+
+CRITICAL: Do NOT write generic text. Every sentence must cite a specific value, date, amount, or document from the data.
+
+Respond with ONLY a valid JSON object (no markdown fences, no preamble) with these exact keys:
 {
-  "narrative": "<the full summary text>",
+  "narrative": "<detailed prose summary, 150-300 words>",
   "recommendation": "<approve | reject | request_more_info>",
   "citations": [{"doc_id": "<id>", "page": <number>}, ...]
 }
@@ -45,40 +50,66 @@ Respond with ONLY a valid JSON object (no markdown fences) with these keys:
 
 def _build_user_prompt(loan_file: dict[str, Any]) -> str:
     """Build the user-facing prompt from structured loan_file data."""
-    parts: list[str] = ["Summarize this loan application:\n"]
+    parts: list[str] = []
 
     # Applicant
     applicant = loan_file.get("applicant") or {}
-    if applicant:
-        parts.append(f"APPLICANT: {json.dumps(applicant)}")
+    parts.append(f"APPLICANT INFO: {json.dumps(applicant, ensure_ascii=False)}")
 
-    # Documents
+    # Documents received
     docs = loan_file.get("documents") or []
-    parts.append(f"DOCUMENTS ({len(docs)} total): {json.dumps(docs)}")
+    doc_summary = [{"doc_id": d.get("doc_id"), "type": d.get("type") or d.get("document_type"), "file": d.get("file_name")} for d in docs]
+    parts.append(f"DOCUMENTS RECEIVED ({len(docs)} total): {json.dumps(doc_summary, ensure_ascii=False)}")
 
-    # Extracted fields
+    # Extracted fields — include all non-sentinel fields with their values and confidence
     fields = loan_file.get("extracted_fields") or []
-    parts.append(f"EXTRACTED FIELDS ({len(fields)} total): {json.dumps(fields)}")
+    useful_fields = [
+        {"field": f.get("field_name"), "value": f.get("value"), "confidence": round(float(f.get("confidence") or 0), 2)}
+        for f in fields
+        if f.get("field_name") and not str(f.get("field_name", "")).startswith("extraction_failure_")
+        and f.get("value") is not None
+    ]
+    parts.append(f"EXTRACTED FIELD VALUES ({len(useful_fields)} fields with data): {json.dumps(useful_fields, ensure_ascii=False)}")
 
-    # Validation
+    # Missing and low-confidence fields
+    missing_fields = [
+        {"field": f.get("field_name"), "confidence": round(float(f.get("confidence") or 0), 2)}
+        for f in fields
+        if f.get("value") is None or float(f.get("confidence") or 0) < 0.4
+    ]
+    if missing_fields:
+        parts.append(f"LOW-CONFIDENCE OR MISSING FIELDS: {json.dumps(missing_fields, ensure_ascii=False)}")
+
+    # Validation findings
     findings = loan_file.get("validation_findings") or []
-    parts.append(f"VALIDATION FINDINGS: {json.dumps(findings)}")
+    parts.append(f"VALIDATION FINDINGS: {json.dumps(findings, ensure_ascii=False)}")
 
-    # Missing docs
+    # Missing documents
     missing = loan_file.get("missing_documents") or []
-    parts.append(f"MISSING DOCUMENTS: {json.dumps(missing)}")
+    if missing:
+        parts.append(f"MISSING REQUIRED DOCUMENTS: {json.dumps([m.get('document_type') for m in missing], ensure_ascii=False)}")
 
-    # Fraud
+    # Fraud flags
     fraud = loan_file.get("fraud_flags") or []
-    parts.append(f"FRAUD FLAGS: {json.dumps(fraud)}")
+    parts.append(f"FRAUD FLAGS: {json.dumps(fraud, ensure_ascii=False)}")
 
-    # Risk
-    risk = loan_file.get("risk_score")
-    parts.append(f"RISK SCORE: {json.dumps(risk)}")
+    # Risk score — include full detail
+    risk = loan_file.get("risk_score") or {}
+    prob = risk.get("approval_probability")
+    prob_str = f"{prob:.1%}" if prob is not None else "N/A (INSUFFICIENT_DATA)"
+    factors = risk.get("factors") or []
+    top_factors = sorted(factors, key=lambda x: abs(x.get("contribution", 0)), reverse=True)[:5]
+    risk_summary = {
+        "approval_probability": prob_str,
+        "status": risk.get("status"),
+        "top_factors": top_factors,
+        "data_completeness_note": risk.get("data_completeness_note"),
+    }
+    parts.append(f"RISK ASSESSMENT: {json.dumps(risk_summary, ensure_ascii=False)}")
 
     # Compliance
-    compliance = loan_file.get("compliance")
-    parts.append(f"COMPLIANCE: {json.dumps(compliance)}")
+    compliance = loan_file.get("compliance") or {}
+    parts.append(f"COMPLIANCE: {json.dumps(compliance, ensure_ascii=False)}")
 
     return "\n\n".join(parts)
 
@@ -220,8 +251,9 @@ def _build_deterministic_summary(
     # Risk
     risk = loan_file.get("risk_score")
     if risk and isinstance(risk, dict):
-        prob = risk.get("approval_probability", 0)
-        parts.append(f"\nApproval probability: {prob:.0%}")
+        prob = risk.get("approval_probability")
+        prob_str = f"{prob:.0%}" if prob is not None else "N/A (Insufficient Data)"
+        parts.append(f"\nApproval probability: {prob_str}")
         factors = risk.get("factors") or []
         if factors:
             top = sorted(factors, key=lambda x: abs(x.get("contribution", 0)), reverse=True)[:3]
@@ -275,7 +307,7 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.1,
-        max_tokens=2048,
+        max_tokens=4096,
     )
     content = response.choices[0].message.content
     if not content:

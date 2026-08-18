@@ -4,10 +4,11 @@ No other module may hardcode these values — import them from here.
 """
 
 # Relative difference abs(a-b)/max(a,b) above which payslip income vs bank deposits is a mismatch.
-INCOME_MISMATCH_THRESHOLD = 0.20
+INCOME_MISMATCH_THRESHOLD = 0.30
 
-# Fraud uses a stricter bar than validation: 20% can be bonus/overtime/timing; 50%+ is hard to explain away.
-INCOME_FRAUD_THRESHOLD = 0.50
+# Fraud threshold: raised to 65% since many people have multiple accounts,
+# EMIs, or use cash — income > deposits by 50% is common and not inherently suspicious.
+INCOME_FRAUD_THRESHOLD = 0.65
 
 # Normalized address similarity (0–1) at or above which two addresses are PASS or MINOR_VARIATION, never MISMATCH.
 ADDRESS_SIMILARITY_THRESHOLD = 0.85

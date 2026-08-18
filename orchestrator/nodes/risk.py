@@ -36,13 +36,14 @@ def run_risk_assessment(loan_file: dict[str, Any]) -> dict[str, Any]:
     loan_file = process_risk_assessment(loan_file)
 
     risk = loan_file.get("risk_score") or {}
-    prob = risk.get("approval_probability", 0.0)
+    prob = risk.get("approval_probability")
+    prob_str = f"{prob:.2f}" if prob is not None else "N/A"
     compliance = loan_file.get("compliance") or {}
     bias_ok = compliance.get("bias_check_passed", False)
 
     append_audit(
         loan_file,
-        f"risk assessment completed: approval_probability={prob:.2f}, "
+        f"risk assessment completed: approval_probability={prob_str}, "
         f"bias_check={'passed' if bias_ok else 'FAILED'}",
     )
 

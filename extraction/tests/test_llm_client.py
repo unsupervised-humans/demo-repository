@@ -17,7 +17,8 @@ from shared.llm_client import get_llm_client, active_model, DEFAULT_MODEL, DEFAU
 
 class TestLLMClient:
     @patch.dict(os.environ, {}, clear=True)
-    def test_missing_api_key_raises_error(self):
+    @patch("os.path.isfile", return_value=False)
+    def test_missing_api_key_raises_error(self, mock_isfile):
         """If GROQ_API_KEY is not in the environment, EnvironmentError must be raised."""
         with pytest.raises(EnvironmentError) as exc_info:
             get_llm_client()

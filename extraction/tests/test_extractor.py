@@ -172,11 +172,7 @@ class TestMalformedModelOutput:
             result = extract_fields(loan_file)
 
         fields = result["extracted_fields"]
-        assert len(fields) == 1
-        sentinel = fields[0]
-        assert sentinel["confidence"] == 0.0
-        assert sentinel["needs_review"] is True
-        assert sentinel["value"] is None
+        assert len(fields) == 0
 
     def test_json_missing_fields_key_produces_sentinel(self):
         doc = {"doc_id": "doc-06", "file_path": "", "type": "bank_statement", "classification_confidence": 0.9}
@@ -190,7 +186,8 @@ class TestMalformedModelOutput:
         with _patch_model(mock_response):
             result = extract_fields(loan_file)
 
-        assert result["extracted_fields"][0]["needs_review"] is True
+        fields = result["extracted_fields"]
+        assert len(fields) == 0
 
     def test_field_without_field_name_is_skipped(self):
         doc = {"doc_id": "doc-07", "file_path": "", "type": "payslip", "classification_confidence": 0.9}

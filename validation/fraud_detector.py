@@ -118,16 +118,20 @@ def _escalate_income_mismatch(findings: list[Finding]) -> list[FraudFlag]:
         income = finding.values.get("gross_monthly_income")
         deposits = finding.values.get("avg_monthly_deposit")
         pct = finding.values.get("percent_difference")
+        # MEDIUM severity: income > deposits is common (taxes, multiple accounts,
+        # cash usage). Only flag as HIGH if the gap exceeds 85% (nearly no income
+        # reaches this account at all).
+        severity = Severity.HIGH if rel > 0.85 else Severity.MEDIUM
         flags.append(
             make_fraud_flag(
                 flag_type="income_mismatch",
-                severity=Severity.HIGH,
+                severity=severity,
                 evidence=finding.message,
                 doc_ids=_doc_ids_from_finding(finding),
                 detail=(
                     f"Income {income} vs deposits {deposits} differs by {pct:.2f}% "
-                    f"(fraud threshold {INCOME_FRAUD_THRESHOLD:.0%}; validation threshold "
-                    f"{INCOME_MISMATCH_THRESHOLD:.0%} is lower because modest gaps can be bonus/overtime)."
+                    f"(threshold {INCOME_FRAUD_THRESHOLD:.0%}). May indicate multiple "
+                    f"bank accounts or cash-based spending. Verify with additional statements."
                 ),
                 weak_signal=False,
             )

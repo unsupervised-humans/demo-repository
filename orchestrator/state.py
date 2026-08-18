@@ -114,13 +114,33 @@ def requires_human_review(
     """
     reasons: list[str] = []
 
-    # 1. Low-confidence extraction fields
-    for ef in loan_file.get("extracted_fields") or []:
-        if ef.get("needs_review"):
-            reasons.append(
-                f"Low-confidence extraction: {ef.get('field_name', '?')} "
-                f"(confidence={ef.get('confidence', 0):.2f})"
-            )
+    # 1. Low-confidence extraction — only flag fields that HAVE a value
+    #    but extracted it with low confidence. Missing/null fields are
+    #    expected (not all docs contain all fields) and should NOT flood
+    #    the review panel.
+    low_conf_fields = [
+        ef.get('field_name', '?')
+        for ef in (loan_file.get("extracted_fields") or [])
+        if ef.get("needs_review")
+        and ef.get("value") is not None  # skip absent/null fields
+        and not str(ef.get('field_name', '')).startswith('extraction_failure_')
+    ]
+    if low_conf_fields:
+        # Group into a single reason instead of one per field
+        reasons.append(
+            f"Low-confidence extraction on {len(low_conf_fields)} field(s): "
+            + ", ".join(low_conf_fields[:5])
+            + (f" (+{len(low_conf_fields)-5} more)" if len(low_conf_fields) > 5 else "")
+        )
+
+    # Extraction failure sentinels (model returned no content for a doc)
+    failure_fields = [
+        ef.get('field_name', '?')
+        for ef in (loan_file.get("extracted_fields") or [])
+        if str(ef.get('field_name', '')).startswith('extraction_failure_')
+    ]
+    if failure_fields:
+        reasons.append(f"Extraction failed for document(s): {', '.join(failure_fields)}")
 
     # 2. Missing documents
     missing = loan_file.get("missing_documents") or []
@@ -135,7 +155,7 @@ def requires_human_review(
             f"Fraud flag [{flag.get('severity', '?')}]: {flag.get('description', '?')}"
         )
 
-    # 4. Critical validation findings
+    # 4. Critical validation findings only (not warnings)
     for finding in loan_file.get("validation_findings") or []:
         if finding.get("severity") == "critical":
             reasons.append(
@@ -145,10 +165,12 @@ def requires_human_review(
     # 5. Risk score below auto-approve
     risk = loan_file.get("risk_score")
     if risk and isinstance(risk, dict):
-        prob = risk.get("approval_probability", 1.0)
-        if prob < 0.80:
+        prob = risk.get("approval_probability")
+        if prob is None:
+            reasons.append("Risk score: Insufficient data for automated scoring")
+        elif prob < 0.80:
             reasons.append(
-                f"Risk score below auto-approve threshold: {prob:.2f}"
+                f"Risk score below auto-approve threshold: {prob:.0%}"
             )
 
     # 6. Compliance failure
@@ -156,11 +178,5 @@ def requires_human_review(
     if compliance and isinstance(compliance, dict):
         if not compliance.get("bias_check_passed", True):
             reasons.append("Compliance: bias check failed")
-
-    # 7. Agent failures recorded in audit log
-    for entry in loan_file.get("audit_log") or []:
-        action = entry.get("action", "")
-        if "failed" in action.lower() or "error" in action.lower():
-            reasons.append(f"Agent failure recorded: {action}")
 
     return bool(reasons), reasons

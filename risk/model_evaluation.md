@@ -46,6 +46,7 @@ Summary of classification and probability metrics evaluated on the identical tes
 ### XGBoost (`risk-xgb-v1`)
 
 ```text
+
                  Predicted Rejected (0)    Predicted Approved (1)
 Actual Rejected (0)       297 (TN)                  3 (FP)
 Actual Approved (1)         0 (FN)                554 (TP)

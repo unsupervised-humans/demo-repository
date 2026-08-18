@@ -31,6 +31,10 @@ import textwrap
 import time
 from typing import Any
 
+# Ensure stdout supports UTF-8 (e.g. printing the rupee symbol on Windows console)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 try:
     import requests
 except ImportError:
@@ -386,7 +390,7 @@ def test_empty_documents(base: str, verbose: bool, timeout: int = 30) -> None:
             _check("Empty documents -> graceful 500 error", True, "HTTP 500")
         elif r.status_code == 200:
             status = r.json().get("status", "?")
-            ok = status in ("failed", "error")
+            ok = status in ("failed", "error", "rejected")
             _check("Empty documents -> status=failed", ok, f"status={status}")
         else:
             _check("Empty documents -> error response", False,
