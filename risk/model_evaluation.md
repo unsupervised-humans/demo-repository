@@ -136,7 +136,21 @@ The selection of XGBoost over Logistic Regression is justified across multiple n
 
 ---
 
-## 6. Summary Conclusion
+## 6. Known Limitation: CIBIL Score Dominance
+
+> [!WARNING]
+> **Production Inference Gap:** The offline 99.65% test accuracy relies heavily on bureau credit scores that are not yet available in the live document extraction pipeline.
+
+1. **SHAP Contribution Disparity:** Across all tested applications, SHAP feature importance confirms that `cibil_score` contributes **3x to 10x more** to the model's log-odds output than any other single feature (e.g., $|\text{SHAP}| \approx 4.1 - 5.9$ for CIBIL vs. $0.4 - 1.9$ for asset values and loan ratios).
+2. **Missing Live Pipeline Bureau Integration:** In the current live LoanIQ pipeline, upstream document extraction agents process payslips, bank statements, and KYC documents, but do not produce a credit bureau score. Consequently, `cibil_score` is defaulted to the training-set median (`600.0`) at inference time for every live applicant.
+3. **Implications for Live Predictive Signal:** Because the single dominant driver is held constant across all live applications, the model's true predictive signal in production is substantially weaker than the 99.65% offline test accuracy suggests. Live decisions rely on the remaining secondary signals (`income_annum`, `loan_to_income_ratio`, `bank_asset_value`, and asset coverage).
+4. **Operational Recommendation:**
+   - Treat live `approval_probability` outputs as **directionally useful risk rankings** (ranking relative creditworthiness based on income, assets, and loan terms) rather than as calibrated absolute probabilities, until a real credit bureau integration is available.
+   - Downstream policy layers and human reviewers should weigh cross-document validation findings, bank deposit consistency, and fraud flags alongside the risk score.
+
+---
+
+## 7. Summary Conclusion
 
 | Criterion | XGBoost | Logistic Regression | Winner |
 | :--- | :---: | :---: | :---: |
@@ -146,3 +160,4 @@ The selection of XGBoost over Logistic Regression is justified across multiple n
 | **Non-Linear Risk Modeling** | Native Tree Splits | Linear hyperplanes only | **XGBoost** |
 | **Regulatory SHAP Breakdown** | Fully Supported (TreeSHAP) | Supported (Linear coeffs) | **XGBoost** |
 | **Overall Selection** | **Recommended for Production** | Baseline Only | **XGBoost** |
+
