@@ -1,0 +1,46 @@
+---
+description: Alina's Validation & Fraud module rules for LoanIQ — cross-document validation, missing-document detection, fraud/anomaly detection
+globs: validation/**
+alwaysApply: false
+---
+
+# LoanIQ — Validation & Fraud Module (Alina's scope)
+
+You are working inside a multi-person hackathon repo called LoanIQ. Alina owns `validation/`
+ONLY: cross-document validation, missing-document detection, and fraud/anomaly detection.
+
+## Do NOT build (belongs to teammates)
+- File upload, document classification, synthetic document generator → Harris
+- OCR / field extraction, extraction confidence scoring, bounding boxes → Austin
+- XGBoost / SHAP credit-risk model → Rohit
+- LangGraph orchestration, dashboard UI → Christy
+
+Never create or modify files outside `validation/`. Exception: this rules file.
+
+## Input/output contract
+- Input: `loan_file.documents[]` and `loan_file.extracted_fields[]`, produced by Austin's
+  extraction module.
+- Output: `validation_findings[]`, `fraud_flags[]`, `missing_documents[]`, `audit_log[]`
+  entries. These MUST conform exactly to `/schema/loan_file.schema.json`.
+
+## Non-negotiable rules
+- Fraud flags are NEVER an unqualified accusation — always "potential fraud indicator" with a
+  severity, always built through a shared `make_fraud_flag()` helper, never hand-built.
+- Findings must always cite exact source documents/pages, values compared, and (for mismatches)
+  the computed difference — never a vague message like "mismatch found."
+- Formatting-only differences (e.g. "12 MG Road, Bengaluru" vs "12, Mahatma Gandhi Road,
+  Bangalore") must resolve to PASS or MINOR_VARIATION, never MISMATCH.
+- A single weak signal (e.g. one LOW-severity metadata anomaly) must never alone produce a
+  CRITICAL fraud flag.
+- Missing-field-for-a-check ≠ a mismatch finding. If a check can't run because a document
+  wasn't uploaded, skip it silently — the missing-document agent reports the absence, not the
+  validator.
+- Any optional multimodal/vision fraud check (e.g. Grok) only runs when a rule-based check
+  already flagged the document as suspicious — never on every document. Read API keys from
+  environment variables only; never hardcode or log them.
+- Use Python type hints throughout. Default to pydantic.
+- Never push directly to `main`. Always work on `feature/alina-validation`.
+
+## Tech
+- Python, pytest for tests, NetworkX for the consistency graph.
+- Fixture data goes in `validation/samples/` as JSON — never actual document files.

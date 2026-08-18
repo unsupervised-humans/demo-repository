@@ -1,0 +1,11 @@
+{
+  "loan_type": "personal",
+  "documents": [
+    { "doc_id": "DOC-001", "file_path": "uploads/doc-001.pdf", "type": "payslip", "classification_confidence": 0.98, "page_count": 1, "is_synthetic": true, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    { "doc_id": "DOC-019", "file_path": "uploads/doc-019.pdf", "type": "bank_statement", "classification_confidence": 0.95, "page_count": 1, "is_synthetic": true, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+  ],
+  "extracted_fields": [
+    { "field_name": "employee_name", "value": "Kiran Shah", "confidence": 0.97, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "account_holder_name", "value": "Kiran Shah", "confidence": 0.96, "source": { "doc_id": "DOC-019", "page": 1 }, "needs_review": false }
+  ]
+}

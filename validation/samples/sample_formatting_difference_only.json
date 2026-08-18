@@ -1,0 +1,13 @@
+{
+  "loan_type": "personal",
+  "documents": [
+    { "doc_id": "DOC-001", "file_path": "uploads/doc-001.pdf", "type": "kyc_id", "classification_confidence": 0.99, "page_count": 1, "is_synthetic": true },
+    { "doc_id": "DOC-002", "file_path": "uploads/doc-002.pdf", "type": "bank_statement", "classification_confidence": 0.95, "page_count": 1, "is_synthetic": true }
+  ],
+  "extracted_fields": [
+    { "field_name": "applicant_name", "value": "Meera Iyer", "confidence": 0.99, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "address", "value": "12 MG Road, Bengaluru", "confidence": 0.94, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "account_holder_name", "value": "Meera Iyer", "confidence": 0.96, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "address", "value": "12, Mahatma Gandhi Road, Bangalore", "confidence": 0.90, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false }
+  ]
+}

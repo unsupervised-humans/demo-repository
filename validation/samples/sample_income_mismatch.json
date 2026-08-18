@@ -1,0 +1,16 @@
+{
+  "loan_type": "personal",
+  "documents": [
+    { "doc_id": "DOC-001", "file_path": "uploads/doc-001.pdf", "type": "payslip", "classification_confidence": 0.98, "page_count": 1, "is_synthetic": true },
+    { "doc_id": "DOC-002", "file_path": "uploads/doc-002.pdf", "type": "bank_statement", "classification_confidence": 0.95, "page_count": 3, "is_synthetic": true },
+    { "doc_id": "DOC-003", "file_path": "uploads/doc-003.pdf", "type": "kyc_id", "classification_confidence": 0.99, "page_count": 1, "is_synthetic": true }
+  ],
+  "extracted_fields": [
+    { "field_name": "applicant_name", "value": "Priya Menon", "confidence": 0.99, "source": { "doc_id": "DOC-003", "page": 1 }, "needs_review": false },
+    { "field_name": "employee_name", "value": "Priya Menon", "confidence": 0.97, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "account_holder_name", "value": "Priya Menon", "confidence": 0.96, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "employer_name", "value": "ABC Technologies", "confidence": 0.97, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "gross_monthly_income", "value": 80000, "confidence": 0.96, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "avg_monthly_deposit", "value": 25000, "confidence": 0.91, "source": { "doc_id": "DOC-002", "page": 3 }, "needs_review": false }
+  ]
+}

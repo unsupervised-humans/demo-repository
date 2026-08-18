@@ -1,0 +1,12 @@
+{
+  "loan_type": "personal",
+  "documents": [
+    { "doc_id": "DOC-001", "file_path": "uploads/doc-001.pdf", "type": "kyc_id", "classification_confidence": 0.99, "page_count": 1, "is_synthetic": true },
+    { "doc_id": "DOC-002", "file_path": "uploads/doc-002.pdf", "type": "payslip", "classification_confidence": 0.98, "page_count": 1, "is_synthetic": true }
+  ],
+  "extracted_fields": [
+    { "field_name": "applicant_name", "value": "Ananya Rao", "confidence": 0.99, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "employee_name", "value": "Ananya Rao", "confidence": 0.97, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "gross_monthly_income", "value": 65000, "confidence": 0.96, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false }
+  ]
+}
