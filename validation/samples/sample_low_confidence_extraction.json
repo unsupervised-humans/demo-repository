@@ -1,0 +1,13 @@
+{
+  "loan_type": "personal",
+  "documents": [
+    { "doc_id": "DOC-001", "file_path": "uploads/doc-001.pdf", "type": "kyc_id", "classification_confidence": 0.99, "page_count": 1, "is_synthetic": true },
+    { "doc_id": "DOC-002", "file_path": "uploads/doc-002.pdf", "type": "payslip", "classification_confidence": 0.80, "page_count": 1, "is_synthetic": true }
+  ],
+  "extracted_fields": [
+    { "field_name": "applicant_name", "value": "Sanjay Patel", "confidence": 0.62, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": true },
+    { "field_name": "id_expiry_date", "value": "2029-04-01", "confidence": 0.55, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": true },
+    { "field_name": "employee_name", "value": "Sanjay Patel", "confidence": 0.58, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": true },
+    { "field_name": "gross_monthly_income", "value": 54000, "confidence": 0.51, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": true }
+  ]
+}

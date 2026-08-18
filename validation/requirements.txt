@@ -1,0 +1,4 @@
+# Validation-module extras (repo root requirements.txt is owned by extraction).
+# Install with: pip install -r validation/requirements.txt
+pydantic>=2.0.0
+networkx>=3.0

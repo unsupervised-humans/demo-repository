@@ -1,0 +1,29 @@
+{
+  "loan_type": "personal",
+  "applicant": {
+    "name": "John Abraham",
+    "declared_income": 65000,
+    "loan_amount_requested": 500000,
+    "loan_type": "personal"
+  },
+  "documents": [
+    { "doc_id": "DOC-001", "file_path": "uploads/doc-001.pdf", "type": "kyc_id", "classification_confidence": 0.99, "page_count": 1, "is_synthetic": true },
+    { "doc_id": "DOC-002", "file_path": "uploads/doc-002.pdf", "type": "payslip", "classification_confidence": 0.98, "page_count": 1, "is_synthetic": true },
+    { "doc_id": "DOC-003", "file_path": "uploads/doc-003.pdf", "type": "bank_statement", "classification_confidence": 0.95, "page_count": 3, "is_synthetic": true }
+  ],
+  "extracted_fields": [
+    { "field_name": "applicant_name", "value": "John Abraham", "confidence": 0.99, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "address", "value": "12 MG Road, Bengaluru", "confidence": 0.94, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "id_expiry_date", "value": "2029-04-01", "confidence": 0.90, "source": { "doc_id": "DOC-001", "page": 1 }, "needs_review": false },
+    { "field_name": "employee_name", "value": "John Abraham", "confidence": 0.97, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "employer_name", "value": "Bright Path Pvt Ltd", "confidence": 0.97, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "gross_monthly_income", "value": 65000, "confidence": 0.96, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "pay_period_start", "value": "2026-06-01", "confidence": 0.95, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "pay_period_end", "value": "2026-06-30", "confidence": 0.95, "source": { "doc_id": "DOC-002", "page": 1 }, "needs_review": false },
+    { "field_name": "account_holder_name", "value": "John Abraham", "confidence": 0.96, "source": { "doc_id": "DOC-003", "page": 1 }, "needs_review": false },
+    { "field_name": "avg_monthly_deposit", "value": 63800, "confidence": 0.91, "source": { "doc_id": "DOC-003", "page": 2 }, "needs_review": false },
+    { "field_name": "address", "value": "12, Mahatma Gandhi Road, Bangalore", "confidence": 0.90, "source": { "doc_id": "DOC-003", "page": 1 }, "needs_review": false },
+    { "field_name": "statement_period_start", "value": "2026-04-01", "confidence": 0.93, "source": { "doc_id": "DOC-003", "page": 1 }, "needs_review": false },
+    { "field_name": "statement_period_end", "value": "2026-06-30", "confidence": 0.93, "source": { "doc_id": "DOC-003", "page": 1 }, "needs_review": false }
+  ]
+}
