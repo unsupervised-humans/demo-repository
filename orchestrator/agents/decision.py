@@ -93,14 +93,18 @@ def evaluate_decision(
         )
         force_review = True
 
-    # ── 5. Low-confidence extractions ─────────────────────────────────────────
+    # ── 5. Low-confidence extractions (only fields that HAVE a value) ──────────
     review_fields = [
         f for f in (loan_file.get("extracted_fields") or [])
         if f.get("needs_review")
+        and f.get("value") is not None  # skip absent/null fields
+        and not str(f.get("field_name", "")).startswith("extraction_failure_")
     ]
     if review_fields:
         names = [f.get("field_name", "?") for f in review_fields]
-        reasons.append(f"Low-confidence fields needing review: {', '.join(names)}")
+        # Group into a single reason
+        summary = ", ".join(names[:4]) + (f" (+{len(names)-4} more)" if len(names) > 4 else "")
+        reasons.append(f"Low-confidence extracted values: {summary}")
         force_review = True
 
     # -- 6. Risk probability ---------------------------------------------------

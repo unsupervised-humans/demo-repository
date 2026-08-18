@@ -102,9 +102,9 @@ class DocumentClassifier:
     def classify(self, doc: NormalizedDocument) -> ClassificationResult:
         """Classify a single normalized document.
 
-        Falls back to `unknown` with confidence 0.0 if the LLM call fails,
-        rather than raising -- a classification failure should not crash
-        the ingestion pipeline for the rest of the batch.
+        Falls back to keyword heuristic if the LLM call fails or returns
+        'unknown' — ensures extraction always has a meaningful document type
+        even when the Groq API is rate-limited or unavailable.
 
         For ``combined_loan_package`` results, automatically follows up with
         ``detect_sections()`` to populate ``detected_sections``.
@@ -115,21 +115,36 @@ class DocumentClassifier:
                 document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
             )
 
+        classification = None
         try:
             result = self.client.chat.completions.create(
                 model=self._get_model(),
                 messages=self._build_classify_messages(doc),
                 temperature=0,
-                max_tokens=256,
+                max_tokens=512,  # classification only needs a short response
             )
             raw_text = result.choices[0].message.content or ""
+            classification = self._parse_result(raw_text)
         except (LLMClientError, Exception) as exc:
-            logger.error("Classification failed for %s: %s", doc.doc_id, exc)
-            return ClassificationResult(
-                document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
+            logger.warning(
+                "LLM classification failed for %s (%s) — using keyword fallback",
+                doc.doc_id, exc,
             )
 
-        classification = self._parse_result(raw_text)
+        # If LLM failed or returned unknown, apply keyword-based heuristic
+        if classification is None or classification.document_type == DocumentType.UNKNOWN:
+            heuristic = self._heuristic_classify(doc)
+            if heuristic.document_type != DocumentType.UNKNOWN:
+                logger.info(
+                    "Heuristic classification for %s: %s (llm=%s)",
+                    doc.doc_id, heuristic.document_type,
+                    classification.document_type if classification else "N/A",
+                )
+                classification = heuristic
+            elif classification is None:
+                classification = ClassificationResult(
+                    document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
+                )
 
         # For combined docs, detect sections with a follow-up call
         if classification.document_type == DocumentType.COMBINED_LOAN_PACKAGE:
@@ -158,7 +173,7 @@ class DocumentClassifier:
                 model=self._get_model(),
                 messages=self._build_section_messages(doc),
                 temperature=0,
-                max_tokens=256,
+                max_tokens=4096,
             )
             raw_text = result.choices[0].message.content or ""
         except Exception as exc:
@@ -175,24 +190,27 @@ class DocumentClassifier:
             from shared.llm_client import active_model
             return active_model
         except ImportError:
-            return "qwen/qwen3.6-27b"
+            return "openai/gpt-oss-20b"
 
     def _build_classify_messages(self, doc: NormalizedDocument) -> list:
-        import base64
         messages: list = [
             {"role": "system", "content": "You are a document classification assistant."}
         ]
         if doc.mime_type == "application/pdf":
-            # Send as base64 for multimodal models, or embed text if available
-            b64 = base64.b64encode(doc.content_ref).decode("ascii")
-            user_content: Any = [
-                {"type": "text", "text": DOCUMENT_CLASSIFICATION_PROMPT},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:application/pdf;base64,{b64}"},
-                },
-            ]
+            pdf_text = ""
+            if doc.content_ref:
+                try:
+                    from io import BytesIO
+                    from pdfminer.high_level import extract_text
+                    pdf_text = extract_text(BytesIO(doc.content_ref)) or ""
+                except Exception as exc:
+                    logger.warning("Failed to extract text from PDF for classification: %s", exc)
+            if pdf_text.strip():
+                user_content = f"{DOCUMENT_CLASSIFICATION_PROMPT}\n\nHere is the text extracted from the PDF:\n{pdf_text}"
+            else:
+                user_content = DOCUMENT_CLASSIFICATION_PROMPT + f"\n\n(Filename: {doc.file_name})"
         else:
+            import base64
             b64 = base64.b64encode(doc.content_ref).decode("ascii")
             mime = doc.mime_type or "image/jpeg"
             user_content = [
@@ -206,19 +224,33 @@ class DocumentClassifier:
         return messages
 
     def _build_section_messages(self, doc: NormalizedDocument) -> list:
-        import base64
         messages: list = [
             {"role": "system", "content": "You are a document section analyzer."}
         ]
-        b64 = base64.b64encode(doc.content_ref).decode("ascii")
         mime = doc.mime_type or "application/pdf"
-        user_content: Any = [
-            {"type": "text", "text": SECTION_DETECTION_PROMPT},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
-            },
-        ]
+        if mime == "application/pdf":
+            pdf_text = ""
+            if doc.content_ref:
+                try:
+                    from io import BytesIO
+                    from pdfminer.high_level import extract_text
+                    pdf_text = extract_text(BytesIO(doc.content_ref)) or ""
+                except Exception as exc:
+                    logger.warning("Failed to extract text from PDF for section detection: %s", exc)
+            if pdf_text.strip():
+                user_content = f"{SECTION_DETECTION_PROMPT}\n\nHere is the text extracted from the PDF:\n{pdf_text}"
+            else:
+                user_content = SECTION_DETECTION_PROMPT + f"\n\n(Filename: {doc.file_name})"
+        else:
+            import base64
+            b64 = base64.b64encode(doc.content_ref).decode("ascii")
+            user_content = [
+                {"type": "text", "text": SECTION_DETECTION_PROMPT},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                },
+            ]
         messages.append({"role": "user", "content": user_content})
         return messages
 
@@ -322,3 +354,94 @@ class DocumentClassifier:
                 normalized.append(s_norm)
 
         return normalized
+
+    def _heuristic_classify(self, doc: NormalizedDocument) -> ClassificationResult:
+        """Keyword-based fallback classifier using filename + OCR text.
+
+        Used when the LLM fails (rate limit, timeout, JSON parse error) or
+        returns 'unknown'. Covers the most common loan document types.
+        """
+        # Build search corpus: filename + OCR text (if available)
+        corpus = (doc.file_name or "").lower()
+        ocr_text = ""
+        if doc.content_ref and doc.mime_type == "application/pdf":
+            try:
+                from io import BytesIO
+                from pdfminer.high_level import extract_text
+                ocr_text = (extract_text(BytesIO(doc.content_ref)) or "").lower()
+            except Exception:
+                pass
+        elif doc.content_ref:
+            try:
+                ocr_text = doc.content_ref.decode("utf-8", errors="ignore").lower()
+            except Exception:
+                pass
+        corpus = corpus + " " + ocr_text
+
+        # Ordered by specificity — check most specific patterns first
+        _KEYWORD_RULES: List[tuple] = [
+            # (document_type_value, required_keywords, optional_boost_keywords)
+            ("combined_loan_package", ["loan application", "payslip"], ["bank statement", "kyc"]),
+            ("payslip", ["gross pay", "net pay"], ["employee", "salary", "payslip", "pay slip", "payroll"]),
+            ("payslip", ["gross monthly", "net monthly"], ["employee", "employer"]),
+            ("payslip", ["salary slip", "pay slip"], []),
+            ("payslip", ["payslip"], []),
+            ("bank_statement", ["opening balance", "closing balance"], ["account", "bank"]),
+            ("bank_statement", ["bank statement"], []),
+            ("bank_statement", ["account statement"], []),
+            ("bank_statement", ["transaction", "debit", "credit"], ["account number", "ifsc"]),
+            ("identity_document", ["aadhaar"], []),
+            ("identity_document", ["pan card", "permanent account number"], []),
+            ("identity_document", ["passport"], ["date of birth", "nationality"]),
+            ("identity_document", ["driving licence", "driving license"], []),
+            ("identity_document", ["voter id", "election card"], []),
+            ("identity_document", ["date of birth", "id number"], ["identity", "kyc"]),
+            ("tax_return", ["income tax", "itr"], []),
+            ("tax_return", ["form 16", "tds certificate"], []),
+            ("tax_return", ["assessment year", "taxable income"], []),
+            ("address_proof", ["utility bill", "electricity bill", "water bill"], []),
+            ("address_proof", ["rental agreement", "rent agreement"], []),
+            ("employment_proof", ["offer letter", "appointment letter"], []),
+            ("employment_proof", ["employment certificate", "experience letter"], []),
+            ("application_form", ["loan application", "loan request"], []),
+            ("application_form", ["loan amount requested", "requested amount"], []),
+        ]
+
+        for doc_type_val, required, _boost in _KEYWORD_RULES:
+            if all(kw in corpus for kw in required):
+                try:
+                    doc_type = DocumentType(doc_type_val)
+                    return ClassificationResult(
+                        document_type=doc_type,
+                        confidence=0.72,  # heuristic — below LLM confidence but above low threshold
+                        low_confidence=False,
+                    )
+                except ValueError:
+                    continue
+
+        # Filename-based fallback
+        name_lower = (doc.file_name or "").lower()
+        filename_rules = [
+            ("payslip", ["payslip", "salary", "paystub", "pay_slip"]),
+            ("bank_statement", ["bank", "statement", "account"]),
+            ("identity_document", ["aadhaar", "pan", "passport", "kyc", "id_card", "identity"]),
+            ("tax_return", ["itr", "tax", "form16", "form_16"]),
+            ("address_proof", ["address", "utility", "bill"]),
+            ("employment_proof", ["employment", "offer", "appointment"]),
+            ("application_form", ["application", "loan_form"]),
+        ]
+        for doc_type_val, keywords in filename_rules:
+            if any(kw in name_lower for kw in keywords):
+                try:
+                    doc_type = DocumentType(doc_type_val)
+                    return ClassificationResult(
+                        document_type=doc_type,
+                        confidence=0.60,
+                        low_confidence=False,
+                    )
+                except ValueError:
+                    continue
+
+        return ClassificationResult(
+            document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
+        )

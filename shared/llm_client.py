@@ -33,7 +33,7 @@ except ImportError as exc:
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
-DEFAULT_MODEL = "qwen/qwen3.6-27b"  # Groq model to use
+DEFAULT_MODEL = "openai/gpt-oss-20b"  # Fallback model (on separate quota from qwen)
 
 
 def get_llm_client() -> OpenAI:

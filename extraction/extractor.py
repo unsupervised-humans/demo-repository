@@ -57,7 +57,7 @@ try:
 except ImportError:
     # shared.llm_client is optional at import time; failure is reported at call time.
     get_llm_client = None  # type: ignore[assignment]
-    active_model = "qwen/qwen3.6-27b"
+    active_model = "openai/gpt-oss-20b"
 
 logger = logging.getLogger(__name__)
 
@@ -204,17 +204,16 @@ def _build_messages(user_prompt: str, file_path: str, doc_id: str) -> list[dict]
     if raw_bytes is not None:
         suffix = path.suffix.lower() if path else ".pdf"
         mime = get_image_mime_type(path) if path else "application/pdf"
-        if suffix == ".pdf":
-            mime = "application/pdf"
-        b64 = base64.b64encode(raw_bytes).decode("ascii")
-        user_content = [
-            {"type": "text", "text": user_prompt},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{b64}"},
-            },
-        ]
-        return [system_msg, {"role": "user", "content": user_content}]
+        if suffix != ".pdf":
+            b64 = base64.b64encode(raw_bytes).decode("ascii")
+            user_content = [
+                {"type": "text", "text": user_prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                },
+            ]
+            return [system_msg, {"role": "user", "content": user_content}]
 
     # Text-only fallback (no file / no deps)
     logger.warning(

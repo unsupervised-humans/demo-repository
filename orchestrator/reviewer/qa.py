@@ -125,7 +125,7 @@ def _call_llm(system_prompt: str, user_prompt: str) -> str:
             {"role": "user", "content": user_prompt},
         ],
         temperature=0,
-        max_tokens=1024,
+        max_tokens=4096,
     )
     content = response.choices[0].message.content
     if not content:
