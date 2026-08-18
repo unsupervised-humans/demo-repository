@@ -1,0 +1,13 @@
+# Pyrefly configuration — point to the project's virtual environment
+# so that third-party imports (pytest, fastapi, etc.) resolve correctly.
+
+python_version = "3.11"
+search_path = ["."]
+site_package_path = [".venv/Lib/site-packages"]
+
+project-excludes = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.venv",
+    "**/__pyrefly_virtual__"
+]

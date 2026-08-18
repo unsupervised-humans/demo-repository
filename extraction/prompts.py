@@ -192,6 +192,81 @@ def other_document_prompt(doc_id: str, doc_type: str) -> str:
     )
 
 
+def combined_loan_package_prompt(doc_id: str, sections: list[str] | None = None) -> str:
+    """Prompt for combined multi-section loan documents.
+
+    This handles PDFs that bundle multiple document types (applicant form,
+    payslip, bank statement, KYC, employment letter) into a single file.
+    Instructs the model to extract ALL relevant fields from ALL sections.
+    """
+    if sections:
+        section_names = ", ".join(sections)
+        section_note = (
+            f"This combined document has been pre-identified as containing the following "
+            f"sections: {section_names}.\n"
+            f"Extract fields from EACH section that is present.\n\n"
+        )
+    else:
+        section_note = (
+            "This is a combined loan application package containing multiple sections.\n"
+            "Extract fields from ALL sections present in the document.\n\n"
+        )
+
+    return (
+        f"This is a combined multi-section loan document (doc_id={doc_id!r}).\n"
+        + section_note
+        + "Extract ALL of the following fields wherever they appear:\n\n"
+        "--- APPLICANT / APPLICATION FORM fields ---\n"
+        "- applicant_name          (string, full name)\n"
+        "- application_date        (date YYYY-MM-DD)\n"
+        "- loan_amount_requested   (number)\n"
+        "- loan_type               (string, e.g. 'home', 'personal', 'auto')\n"
+        "- loan_term               (number, in years)\n"
+        "- declared_income         (number, monthly or annual)\n"
+        "- no_of_dependents        (number)\n"
+        "- self_employed           (boolean/string)\n"
+        "- education               (string)\n\n"
+        "--- PAYSLIP fields ---\n"
+        "- employer_name           (string)\n"
+        "- employee_name           (string)\n"
+        "- gross_monthly_income    (number)\n"
+        "- net_monthly_income      (number)\n"
+        "- pay_period_start        (date YYYY-MM-DD)\n"
+        "- pay_period_end          (date YYYY-MM-DD)\n"
+        "- designation             (string)\n"
+        "- employee_id             (string)\n\n"
+        "--- BANK STATEMENT fields ---\n"
+        "- account_holder_name     (string)\n"
+        "- account_number          (string)\n"
+        "- bank_name               (string)\n"
+        "- statement_period_start  (date YYYY-MM-DD)\n"
+        "- statement_period_end    (date YYYY-MM-DD)\n"
+        "- opening_balance         (number)\n"
+        "- closing_balance         (number)\n"
+        "- avg_monthly_deposit     (number)\n"
+        "- avg_monthly_withdrawal  (number)\n\n"
+        "--- KYC / IDENTITY DOCUMENT fields ---\n"
+        "- id_number               (string)\n"
+        "- id_document_type        (string)\n"
+        "- id_expiry_date          (date YYYY-MM-DD)\n"
+        "- address_line1           (string)\n"
+        "- address_city            (string)\n"
+        "- address_state           (string)\n"
+        "- address_pincode         (string)\n\n"
+        "--- EMPLOYMENT LETTER fields (if present) ---\n"
+        "- employment_start_date   (date YYYY-MM-DD)\n"
+        "- employment_type         (string)\n"
+        "- annual_ctc              (number)\n\n"
+        "--- TAX RETURN fields (if present) ---\n"
+        "- assessment_year         (string)\n"
+        "- gross_total_income      (number)\n"
+        "- pan_number              (string)\n\n"
+        "Extract only fields that are actually present in the document. "
+        "If a field is missing or illegible, include it with value=null and confidence<=0.3."
+        + _JSON_REMINDER
+    )
+
+
 # ── Router ─────────────────────────────────────────────────────────────────────
 
 _PROMPT_MAP: dict[str, object] = {
@@ -202,10 +277,12 @@ _PROMPT_MAP: dict[str, object] = {
     "tax_return": tax_return_prompt,
     "address_proof": address_proof_prompt,
     "employment_proof": employment_proof_prompt,
+    "combined_loan_package": combined_loan_package_prompt,
+    "application_form": other_document_prompt,
 }
 
 
-def get_prompt(doc_type: str, doc_id: str) -> str:
+def get_prompt(doc_type: str, doc_id: str, detected_sections: list[str] | None = None) -> str:
     """Return the appropriate extraction prompt for *doc_type*.
 
     Falls back to the generic other_document_prompt for unknown types.
@@ -216,12 +293,17 @@ def get_prompt(doc_type: str, doc_id: str) -> str:
         Document type from the schema enum (e.g. 'payslip', 'kyc_id').
     doc_id : str
         Document identifier, embedded in the prompt for traceability.
+    detected_sections : list[str] | None
+        For combined_loan_package documents, the list of section types
+        detected by the classifier. Passed to the combined prompt.
 
     Returns
     -------
     str
         The user-turn prompt content to send to the model.
     """
+    if doc_type == "combined_loan_package":
+        return combined_loan_package_prompt(doc_id, sections=detected_sections)
     fn = _PROMPT_MAP.get(doc_type)
     if fn is not None:
         return fn(doc_id)  # type: ignore[operator]

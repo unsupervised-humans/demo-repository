@@ -1,19 +1,30 @@
 """
 Document Classification Agent.
 
-Uses the shared Grok multimodal API client to determine document type
+Uses the shared Groq LLM API client to determine document type
 for a normalized document. This is Harris's only LLM-touching component.
 
 Does NOT extract financial fields -- classification only.
+
+Multi-section support
+---------------------
+When a single uploaded PDF contains multiple logical sections (payslip +
+bank statement + KYC + applicant form), the classifier:
+1. Returns document_type = "combined_loan_package" with high confidence.
+2. Calls detect_sections() to identify which section types are present.
+   The section list is stored in ClassificationResult.detected_sections and
+   forwarded to the extraction node so it can issue a single all-sections prompt.
 """
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Optional
+from typing import Any, List, Optional
+
 
 from shared.llm_client import GrokClient, LLMClientError, get_default_client
-from shared.prompts import DOCUMENT_CLASSIFICATION_PROMPT
+from shared.prompts import DOCUMENT_CLASSIFICATION_PROMPT, SECTION_DETECTION_PROMPT
 
 from .models.document import ClassificationResult, DocumentType, NormalizedDocument
 
@@ -23,9 +34,54 @@ LOW_CONFIDENCE_THRESHOLD = 0.55
 
 VALID_TYPES = {t.value for t in DocumentType}
 
+# Aliases the LLM might return even with an updated prompt
+_TYPE_ALIASES: dict[str, str] = {
+    "paystub": "payslip",
+    "salary_slip": "payslip",
+    "pay_slip": "payslip",
+    "w2": "tax_return",
+    "itr": "tax_return",
+    "id_card": "identity_document",
+    "aadhaar": "identity_document",
+    "pan_card": "identity_document",
+    "passport": "identity_document",
+    "kyc": "identity_document",
+    "kyc_id": "identity_document",
+    "utility_bill": "address_proof",
+    "employment_letter": "employment_proof",
+    "offer_letter": "employment_proof",
+    "combined": "combined_loan_package",
+    "multi_section": "combined_loan_package",
+    "loan_package": "combined_loan_package",
+}
+
+# Valid section types that can appear inside a combined_loan_package
+VALID_SECTION_TYPES = {
+    "application_form", "payslip", "bank_statement", "identity_document",
+    "address_proof", "employment_proof", "tax_return",
+}
+
+# Aliases for section types
+_SECTION_ALIASES: dict[str, str] = {
+    "kyc": "identity_document",
+    "kyc_id": "identity_document",
+    "id_card": "identity_document",
+    "paystub": "payslip",
+    "salary_slip": "payslip",
+    "pay_slip": "payslip",
+    "itr": "tax_return",
+    "utility_bill": "address_proof",
+    "employment_letter": "employment_proof",
+    "offer_letter": "employment_proof",
+}
+
 
 class DocumentClassifier:
-    """Classifies a normalized document into one of the supported types."""
+    """Classifies a normalized document into one of the supported types.
+
+    For multi-section documents classified as ``combined_loan_package``,
+    also detects the constituent section types via a follow-up LLM call.
+    """
 
     def __init__(
         self,
@@ -36,9 +92,9 @@ class DocumentClassifier:
         self.low_confidence_threshold = low_confidence_threshold
 
     @property
-    def client(self) -> GrokClient:
+    def client(self) -> Any:
         # Lazily resolve so unit tests can construct a DocumentClassifier
-        # without XAI_API_KEY being set, as long as they inject a client.
+        # without GROQ_API_KEY being set, as long as they inject a client.
         if self._client is None:
             self._client = get_default_client()
         return self._client
@@ -49,6 +105,9 @@ class DocumentClassifier:
         Falls back to `unknown` with confidence 0.0 if the LLM call fails,
         rather than raising -- a classification failure should not crash
         the ingestion pipeline for the rest of the batch.
+
+        For ``combined_loan_package`` results, automatically follows up with
+        ``detect_sections()`` to populate ``detected_sections``.
         """
         if doc.content_ref is None:
             logger.warning("No content to classify for %s", doc.doc_id)
@@ -57,30 +116,157 @@ class DocumentClassifier:
             )
 
         try:
-            result = self.client.classify_document(
-                image_bytes=doc.content_ref,
-                mime_type=doc.mime_type,
-                prompt=DOCUMENT_CLASSIFICATION_PROMPT,
+            result = self.client.chat.completions.create(
+                model=self._get_model(),
+                messages=self._build_classify_messages(doc),
+                temperature=0,
+                max_tokens=256,
             )
-        except LLMClientError as exc:
+            raw_text = result.choices[0].message.content or ""
+        except (LLMClientError, Exception) as exc:
             logger.error("Classification failed for %s: %s", doc.doc_id, exc)
             return ClassificationResult(
                 document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
             )
 
-        return self._parse_result(result)
+        classification = self._parse_result(raw_text)
 
-    def _parse_result(self, result: dict) -> ClassificationResult:
-        raw_type = result.get("document_type", "unknown")
-        confidence = result.get("confidence", 0.0)
+        # For combined docs, detect sections with a follow-up call
+        if classification.document_type == DocumentType.COMBINED_LOAN_PACKAGE:
+            sections = self.detect_sections(doc)
+            classification.detected_sections = sections
+            logger.info(
+                "Combined loan package detected in %s — sections: %s",
+                doc.doc_id, sections,
+            )
+
+        return classification
+
+    def detect_sections(self, doc: NormalizedDocument) -> List[str]:
+        """Detect which section types are present inside a combined document.
+
+        Returns a list of normalized section type strings (e.g.
+        ``["payslip", "bank_statement", "identity_document"]``).
+        Falls back to an empty list on error — the extraction node will
+        use a generic all-sections prompt as fallback.
+        """
+        if doc.content_ref is None:
+            return []
+
+        try:
+            result = self.client.chat.completions.create(
+                model=self._get_model(),
+                messages=self._build_section_messages(doc),
+                temperature=0,
+                max_tokens=256,
+            )
+            raw_text = result.choices[0].message.content or ""
+        except Exception as exc:
+            logger.warning("Section detection failed for %s: %s", doc.doc_id, exc)
+            return []
+
+        return self._parse_sections(raw_text)
+
+    # ── Private helpers ──────────────────────────────────────────────────────
+
+    def _get_model(self) -> str:
+        """Return the active model name from the LLM client."""
+        try:
+            from shared.llm_client import active_model
+            return active_model
+        except ImportError:
+            return "qwen/qwen3.6-27b"
+
+    def _build_classify_messages(self, doc: NormalizedDocument) -> list:
+        import base64
+        messages: list = [
+            {"role": "system", "content": "You are a document classification assistant."}
+        ]
+        if doc.mime_type == "application/pdf":
+            # Send as base64 for multimodal models, or embed text if available
+            b64 = base64.b64encode(doc.content_ref).decode("ascii")
+            user_content: Any = [
+                {"type": "text", "text": DOCUMENT_CLASSIFICATION_PROMPT},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:application/pdf;base64,{b64}"},
+                },
+            ]
+        else:
+            b64 = base64.b64encode(doc.content_ref).decode("ascii")
+            mime = doc.mime_type or "image/jpeg"
+            user_content = [
+                {"type": "text", "text": DOCUMENT_CLASSIFICATION_PROMPT},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                },
+            ]
+        messages.append({"role": "user", "content": user_content})
+        return messages
+
+    def _build_section_messages(self, doc: NormalizedDocument) -> list:
+        import base64
+        messages: list = [
+            {"role": "system", "content": "You are a document section analyzer."}
+        ]
+        b64 = base64.b64encode(doc.content_ref).decode("ascii")
+        mime = doc.mime_type or "application/pdf"
+        user_content: Any = [
+            {"type": "text", "text": SECTION_DETECTION_PROMPT},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            },
+        ]
+        messages.append({"role": "user", "content": user_content})
+        return messages
+
+    def _parse_result(self, raw: str) -> ClassificationResult:
+        """Parse LLM classification JSON response."""
+        text = raw.strip()
+        # Strip markdown fences
+        if "```" in text:
+            for part in text.split("```"):
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    text = part
+                    break
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            # Try to extract first JSON object
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(text[start:end])
+                except json.JSONDecodeError:
+                    logger.warning("Could not parse classification JSON: %r", raw[:200])
+                    return ClassificationResult(
+                        document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
+                    )
+            else:
+                return ClassificationResult(
+                    document_type=DocumentType.UNKNOWN, confidence=0.0, low_confidence=True
+                )
+
+        raw_type = str(data.get("document_type", "unknown")).strip().lower()
+        confidence = data.get("confidence", 0.0)
 
         try:
             confidence = float(confidence)
         except (TypeError, ValueError):
             confidence = 0.0
 
+        # Apply alias normalization
+        raw_type = _TYPE_ALIASES.get(raw_type, raw_type)
+
         if raw_type not in VALID_TYPES:
-            logger.warning("Grok returned unrecognized document_type: %r", raw_type)
+            logger.warning("LLM returned unrecognized document_type: %r", raw_type)
             raw_type = DocumentType.UNKNOWN.value
             confidence = min(confidence, 0.0)
 
@@ -97,3 +283,42 @@ class DocumentClassifier:
             confidence=confidence,
             low_confidence=low_confidence,
         )
+
+    def _parse_sections(self, raw: str) -> List[str]:
+        """Parse section detection JSON response."""
+        text = raw.strip()
+        if "```" in text:
+            for part in text.split("```"):
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    text = part
+                    break
+
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end > start:
+                try:
+                    data = json.loads(text[start:end])
+                except json.JSONDecodeError:
+                    logger.warning("Could not parse section detection JSON: %r", raw[:200])
+                    return []
+            else:
+                return []
+
+        raw_sections = data.get("sections", [])
+        if not isinstance(raw_sections, list):
+            return []
+
+        normalized: List[str] = []
+        for s in raw_sections:
+            s_lower = str(s).strip().lower()
+            s_norm = _SECTION_ALIASES.get(s_lower, s_lower)
+            if s_norm in VALID_SECTION_TYPES and s_norm not in normalized:
+                normalized.append(s_norm)
+
+        return normalized

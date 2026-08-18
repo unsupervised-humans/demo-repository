@@ -72,6 +72,8 @@ class SyntheticDocumentGenerator:
     # --- normal documents ---------------------------------------------
 
     def normal_payslip(self) -> SyntheticDoc:
+        if getattr(self, "_cached_normal_payslip", None) is not None:
+            return self._cached_normal_payslip
         lines = [
             "ACME CORP — PAYSLIP",
             "Employee: Jordan Rivera",
@@ -82,13 +84,16 @@ class SyntheticDocumentGenerator:
             "Employer: Acme Corp",
         ]
         pdf = self._render_pdf(lines)
-        return SyntheticDoc(
+        doc = SyntheticDoc(
             name="normal_payslip",
             file_name="normal_payslip.pdf",
             category="normal",
             document_type="payslip",
             file_bytes=pdf,
         )
+        self._cached_normal_payslip = doc
+        return doc
+
 
     def normal_bank_statement(self) -> SyntheticDoc:
         lines = [
@@ -297,11 +302,14 @@ class SyntheticDocumentGenerator:
         return buf.getvalue()
 
     def _write_all(self, docs: list[SyntheticDoc]) -> None:
+        if not self.output_dir:
+            return
         os.makedirs(self.output_dir, exist_ok=True)
         for doc in docs:
             path = os.path.join(self.output_dir, doc.file_name)
             with open(path, "wb") as f:
                 f.write(doc.file_bytes)
+
 
 
 if __name__ == "__main__":

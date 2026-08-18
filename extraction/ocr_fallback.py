@@ -70,10 +70,38 @@ def extract_text(file_path: str | Path) -> Optional[str]:
     return None
 
 
-# ── PDF helpers ───────────────────────────────────────────────────────────────
+# -- PDF helpers ---------------------------------------------------------------
 
 def _pdf_text(path: Path) -> Optional[str]:
-    """Extract embedded text from a PDF using pdfminer.six."""
+    """Extract embedded text from a PDF.
+
+    Strategy:
+    1. PyMuPDF (fitz) -- best layout preservation for structured docs.
+    2. pdfminer.six -- fallback if PyMuPDF is not installed.
+    """
+    # --- PyMuPDF (preferred) ---
+    try:
+        import fitz  # type: ignore  # PyMuPDF
+
+        doc = fitz.open(str(path))
+        pages_text: list[str] = []
+        for page in doc:
+            pages_text.append(page.get_text("text"))
+        doc.close()
+        text = "\n".join(pages_text).strip()
+        if text and len(text) >= MIN_TEXT_CHARS:
+            return text
+        logger.debug("OCR fallback: PyMuPDF extracted too little text from %s", path)
+        # Fall through to pdfminer
+    except ImportError:
+        logger.debug(
+            "PyMuPDF (fitz) not installed; trying pdfminer.six. "
+            "Install with: pip install pymupdf"
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("OCR fallback: PyMuPDF failed for %s: %s", path, exc)
+
+    # --- pdfminer.six (fallback) ---
     try:
         from pdfminer.high_level import extract_text as pdfminer_extract  # type: ignore
         text = pdfminer_extract(str(path))

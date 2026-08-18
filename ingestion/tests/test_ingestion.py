@@ -163,7 +163,9 @@ class TestIngestionPipeline:
         assert result.status == IngestionStatus.CORRUPTED
         assert result.error is not None
         # classifier should never be called on unusable content
+        assert isinstance(pipeline.classifier.classify, MagicMock)
         pipeline.classifier.classify.assert_not_called()
+
 
     def test_ingest_batch_isolates_failures(self, synthetic_docs):
         pipeline = self._pipeline_with_stub_classifier()
