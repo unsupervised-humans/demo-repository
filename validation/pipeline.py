@@ -24,7 +24,8 @@ def process_loan_file(loan_file: dict[str, Any]) -> dict[str, Any]:
         application_date = loan_file.get("created_at")
 
         findings = validate(fields, application_date=application_date)
-        missing_result = check_missing_documents(loan_type, None, documents)
+        # Pass extracted_fields so combined-PDF field signatures are checked
+        missing_result = check_missing_documents(loan_type, None, documents, extracted_fields=fields)
         flags = detect_fraud(fields, documents, findings)
         graph = build_consistency_graph(fields, findings)
 

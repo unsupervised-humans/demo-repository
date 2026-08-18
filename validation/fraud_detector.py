@@ -298,9 +298,10 @@ def _metadata_anomalies(documents: list[dict[str, Any]]) -> list[FraudFlag]:
 
 
 def detect_fraud(
-    extracted_fields: list[ExtractedField | dict[str, Any]],
+    extracted_fields: Any,
     documents: list[dict[str, Any]] | None,
     validation_findings: list[Finding],
+
     *,
     visual_client: GrokVisualClient | None = None,
     run_visual: bool = True,

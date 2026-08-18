@@ -6,6 +6,13 @@ Top-level ingestion pipeline.
 This is Harris's public entry point. Austin (or the orchestrator) calls
 `ingest_batch()` with a folder or list of raw files and gets back a
 schema-compatible loan_file.documents[] list.
+
+File Path Contract
+------------------
+When ingesting from a folder, the ``file_path`` field on every ``LoanDocument``
+is set to the **full absolute path** of the source file.  This is critical:
+the extraction node uses ``file_path`` to read file bytes for OCR / LLM
+extraction.  Without a full path, extraction silently receives no content.
 """
 
 from __future__ import annotations
@@ -34,6 +41,10 @@ class IngestionPipeline:
         """Run a single file through validate -> normalize -> classify."""
         normalized = self.normalizer.normalize(raw)
 
+        # Propagate full file_path from RawFile if provided
+        if raw.file_path:
+            normalized.file_path = raw.file_path
+
         if normalized.status != IngestionStatus.OK:
             # Corrupted/unsupported/too-large/empty files still produce a
             # documents[] entry, so Austin knows this doc_id exists and
@@ -47,6 +58,7 @@ class IngestionPipeline:
                 confidence=0.0,
                 status=normalized.status,
                 error=normalized.error,
+                file_path=normalized.file_path,
             )
 
         classification = self.classifier.classify(normalized)
@@ -59,6 +71,8 @@ class IngestionPipeline:
             page_count=normalized.page_count,
             confidence=classification.confidence,
             status=IngestionStatus.OK,
+            file_path=normalized.file_path,
+            detected_sections=classification.detected_sections,
         )
 
     def ingest_batch(self, raw_files: Iterable[RawFile]) -> list[LoanDocument]:
@@ -80,19 +94,30 @@ class IngestionPipeline:
                         confidence=0.0,
                         status=IngestionStatus.CORRUPTED,
                         error=str(exc),
+                        file_path=raw.file_path,
                     )
                 )
         return results
 
     def ingest_folder(self, folder_path: str) -> list[LoanDocument]:
-        """Convenience: ingest every file in a folder."""
+        """Convenience: ingest every file in a folder.
+
+        Sets ``RawFile.file_path`` to the full absolute path so that
+        downstream extraction can locate and read the file.
+        """
         raw_files = []
         for name in sorted(os.listdir(folder_path)):
-            full_path = os.path.join(folder_path, name)
+            full_path = os.path.abspath(os.path.join(folder_path, name))
             if not os.path.isfile(full_path):
                 continue
             with open(full_path, "rb") as f:
-                raw_files.append(RawFile(file_name=name, file_bytes=f.read()))
+                raw_files.append(
+                    RawFile(
+                        file_name=name,
+                        file_bytes=f.read(),
+                        file_path=full_path,  # ← full path preserved
+                    )
+                )
         return self.ingest_batch(raw_files)
 
     def to_loan_file_documents(self, documents: list[LoanDocument]) -> dict:

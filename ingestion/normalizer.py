@@ -163,17 +163,22 @@ class Normalizer:
 
     def _count_pdf_pages(self, file_bytes: bytes) -> int:
         """Count PDF pages using pypdf if available, else a regex fallback."""
+        if not file_bytes.startswith(b"%PDF-"):
+            raise ValueError("Invalid PDF header")
         try:
             from pypdf import PdfReader  # type: ignore
+
 
             reader = PdfReader(io.BytesIO(file_bytes))
             if len(reader.pages) == 0:
                 raise ValueError("PDF has zero pages")
             return len(reader.pages)
-        except ImportError:
-            # Fallback: count "/Type /Page" occurrences. Rough but avoids
-            # a hard dependency on pypdf for basic page counting.
+        except (ImportError, Exception):
+            # Fallback: count "/Type /Page" occurrences minus "/Type /Pages" parent node.
             count = file_bytes.count(b"/Type/Page") + file_bytes.count(b"/Type /Page")
-            if count == 0:
-                raise ValueError("Unable to determine page count without pypdf")
-            return count
+            pages_root = file_bytes.count(b"/Type/Pages") + file_bytes.count(b"/Type /Pages")
+            real_count = count - pages_root
+            if real_count <= 0:
+                real_count = count if count > 0 else 1
+            return real_count
+

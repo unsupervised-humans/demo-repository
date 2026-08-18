@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 
 class DocumentType(str, Enum):
@@ -23,6 +23,10 @@ class DocumentType(str, Enum):
     IDENTITY_DOCUMENT = "identity_document"
     ADDRESS_PROOF = "address_proof"
     EMPLOYMENT_PROOF = "employment_proof"
+    APPLICATION_FORM = "application_form"
+    # A single uploaded file that contains multiple logical sections
+    # (e.g. applicant form + payslip + bank statement + KYC all in one PDF)
+    COMBINED_LOAN_PACKAGE = "combined_loan_package"
     UNKNOWN = "unknown"
 
 
@@ -47,6 +51,8 @@ class RawFile:
     file_name: str
     file_bytes: bytes
     mime_type: Optional[str] = None  # may be unknown until validated
+    # Full absolute path on disk — populated when ingesting from folder
+    file_path: Optional[str] = None
 
 
 @dataclass
@@ -64,6 +70,8 @@ class NormalizedDocument:
     # output handed to Austin.
     content_ref: Optional[bytes] = None
     error: Optional[str] = None
+    # Full absolute path to the file on disk (if available)
+    file_path: Optional[str] = None
 
 
 @dataclass
@@ -73,6 +81,8 @@ class ClassificationResult:
     document_type: DocumentType
     confidence: float
     low_confidence: bool = field(default=False)
+    # For combined_loan_package: list of detected section types inside the file
+    detected_sections: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -94,18 +104,27 @@ class LoanDocument:
     confidence: float
     status: IngestionStatus = IngestionStatus.OK
     error: Optional[str] = None
+    # Full absolute path on disk — used by the extraction node to read file content
+    file_path: Optional[str] = None
+    # For combined_loan_package: which section types were detected inside
+    detected_sections: List[str] = field(default_factory=list)
 
     def to_schema_dict(self) -> dict:
         """Serialize to the shared loan_file.documents[] shape."""
         payload = {
             "doc_id": self.doc_id,
             "file_name": self.file_name,
+            "file_path": self.file_path or self.file_name,
             "document_type": self.document_type.value,
+            "type": self.document_type.value,  # alias used by extraction node
             "mime_type": self.mime_type,
             "page_count": self.page_count,
             "confidence": self.confidence,
+            "classification_confidence": self.confidence,
             "status": self.status.value,
         }
         if self.error:
             payload["error"] = self.error
+        if self.detected_sections:
+            payload["detected_sections"] = self.detected_sections
         return payload

@@ -76,7 +76,7 @@ class RiskModel:
             missing = [col for col in self.feature_names if col not in X.columns]
             for col in missing:
                 X[col] = 0.0
-            X = X[self.feature_names]
+            X = pd.DataFrame(X[self.feature_names])
 
         return self.estimator.predict_proba(X)
 

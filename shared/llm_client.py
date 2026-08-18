@@ -45,11 +45,22 @@ def get_llm_client() -> OpenAI:
     EnvironmentError
         If GROQ_API_KEY is not set in the environment.
     """
+    if not os.environ.get("GROQ_API_KEY"):
+        # Load from .env if present
+        env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+        if os.path.isfile(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         raise EnvironmentError(
             "GROQ_API_KEY environment variable is not set. "
-            "Export it before running the extraction pipeline:\n"
+            "Export it or place GROQ_API_KEY=gsk_... in a .env file:\n"
             "  export GROQ_API_KEY=gsk_..."
         )
 
@@ -64,3 +75,9 @@ def get_llm_client() -> OpenAI:
 
 # Module-level convenience — updated by get_llm_client() if GROQ_MODEL is set.
 active_model: str = os.environ.get("GROQ_MODEL", DEFAULT_MODEL)
+
+# Compatibility aliases used by classifier and tests
+GrokClient = OpenAI
+LLMClientError = Exception
+get_default_client = get_llm_client
+

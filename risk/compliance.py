@@ -56,3 +56,7 @@ def run_compliance_check(
     """Convenience helper to run compliance checks."""
     agent = ComplianceAgent()
     return agent.evaluate_loan_file(loan_file, feature_names=feature_names)
+
+
+run_compliance_agent = run_compliance_check
+

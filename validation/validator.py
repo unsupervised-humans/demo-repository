@@ -352,7 +352,7 @@ def _check_date_consistency(
         pe = _try_parse_date(pay_ends[0].value)
         ss = _try_parse_date(stmt_starts[0].value)
         se = _try_parse_date(stmt_ends[0].value)
-        if None not in (ps, pe, ss, se):
+        if ps is not None and pe is not None and ss is not None and se is not None:
             gap = min(abs((ps - se).days), abs((ss - pe).days), abs((ps - ss).days))
             overlapping = not (pe < ss or se < ps)
             if not overlapping and gap > DATE_TOLERANCE_DAYS:
@@ -453,8 +453,9 @@ def _check_employment_consistency(fields: list[ExtractedField]) -> list[Finding]
 
 
 def validate(
-    extracted_fields: list[ExtractedField | dict[str, Any]],
+    extracted_fields: Any,
     *,
+
     application_date: date | str | None = None,
 ) -> list[Finding]:
     """Run all cross-document checks. Skip any check whose inputs are absent."""

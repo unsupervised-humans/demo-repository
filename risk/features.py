@@ -3,11 +3,25 @@
 Extracts numerical features matching the Kaggle Loan Approval Prediction Dataset
 from loan_file dictionaries, defaulting unextracted fields with documented medians
 and ensuring protected demographic attributes are strictly excluded.
+
+Pre-validation Gate
+-------------------
+``validate_mandatory_features()`` checks whether the minimum required data is
+present before calling the XGBoost model.  If income and loan amount are both
+zero (indicating extraction failure), the model MUST NOT be called, because:
+
+  - Default asset imputation (~28.5M INR total) with 0 income and 0 loan amount
+    causes the XGBoost model to output approval_probability = 1.0.
+  - This would be a dangerously misleading result when data extraction failed.
+
+When mandatory features are missing, the risk scoring agent returns
+{"status": "INSUFFICIENT_DATA", "approval_probability": None, ...} and the
+decision agent escalates to human review.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Tuple
 
 # Protected demographic attributes that MUST NEVER be used in credit scoring or feature sets
 PROTECTED_ATTRIBUTES: Set[str] = {
@@ -56,6 +70,14 @@ DEFAULT_FEATURE_VALUES: Dict[str, float] = {
     "bank_asset_value": 4600000.0,  # Median bank asset value
 }
 
+# Total default asset value (used to detect all-default imputation state)
+_TOTAL_DEFAULT_ASSETS = (
+    DEFAULT_FEATURE_VALUES["residential_assets_value"]
+    + DEFAULT_FEATURE_VALUES["commercial_assets_value"]
+    + DEFAULT_FEATURE_VALUES["luxury_assets_value"]
+    + DEFAULT_FEATURE_VALUES["bank_asset_value"]
+)
+
 
 def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, Any]:
     """Extract model features from a validated loan file.
@@ -82,16 +104,30 @@ def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, Any]
     extracted_map: Dict[str, Any] = {}
 
     for field in extracted_fields:
-        name = field.get("field_name", "").strip().lower()
+        name = (field.get("field_name") or "").strip().lower()
         val = field.get("value")
-        extracted_map[name] = val
+        confidence = 0.0
+        try:
+            confidence = float(field.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
 
-        if name == "gross_monthly_income" and isinstance(val, (int, float)):
+        # Skip extraction failure sentinels and very-low-confidence fields
+        if name.startswith("extraction_failure_"):
+            continue
+        # Only use fields with meaningful confidence
+        if confidence > 0.0 and val is not None:
+            extracted_map[name] = val
+
+        if name == "gross_monthly_income" and isinstance(val, (int, float)) and confidence > 0.0:
             income_annum = float(val) * 12.0
-        elif name == "annual_income" and isinstance(val, (int, float)):
+        elif name == "annual_income" and isinstance(val, (int, float)) and confidence > 0.0:
             income_annum = float(val)
-        elif name == "loan_amount" and isinstance(val, (int, float)):
+        elif name == "loan_amount" and isinstance(val, (int, float)) and confidence > 0.0:
             loan_amount = float(val)
+        elif name == "loan_amount_requested" and isinstance(val, (int, float)) and confidence > 0.0:
+            if loan_amount == 0.0:
+                loan_amount = float(val)
 
     # Track fields that were defaulted
     defaulted_fields: List[str] = []
@@ -195,7 +231,57 @@ def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, Any]
         "bank_asset_value": float(bank_asset_value),
         "loan_to_income_ratio": round(float(loan_to_income_ratio), 4),
         "data_completeness_note": data_completeness_note,
+        "_defaulted_fields": defaulted_fields,
     }
+
+
+def validate_mandatory_features(features: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """Check whether minimum mandatory features are present for risk scoring.
+
+    A risk score is ONLY meaningful when:
+    1. income_annum > 0 (extraction didn't fail for income fields), OR
+       loan_amount > 0 (at least loan amount is known).
+    2. Not ALL asset values are defaulted simultaneously with income=0 and
+       loan_amount=0 (which produces the misleading approval_probability=1.0).
+
+    Returns
+    -------
+    (is_sufficient, missing_mandatory_list)
+        is_sufficient: True if the model can be called safely.
+        missing_mandatory_list: Human-readable list of what's missing/defaulted.
+    """
+    income = float(features.get("income_annum") or 0.0)
+    loan = float(features.get("loan_amount") or 0.0)
+    defaulted = features.get("_defaulted_fields") or []
+
+    missing: List[str] = []
+
+    # Check income: must be non-zero
+    if income == 0.0:
+        missing.append("income_annum (zero - likely extraction failure)")
+
+    # Check loan amount: must be non-zero
+    if loan == 0.0:
+        missing.append("loan_amount (zero - not extracted or provided)")
+
+    # Critical: if BOTH income and loan are zero AND assets are all defaulted,
+    # the model will produce a meaningless 1.0 score.
+    all_asset_fields = {
+        "residential_assets_value", "commercial_assets_value",
+        "luxury_assets_value", "bank_asset_value",
+    }
+    assets_all_defaulted = all_asset_fields.issubset(set(defaulted))
+
+    if income == 0.0 and loan == 0.0:
+        # Cannot score safely at all
+        is_sufficient = False
+    elif income == 0.0 and assets_all_defaulted:
+        # Income unknown + all assets defaulted: score would be unreliable
+        is_sufficient = False
+    else:
+        is_sufficient = True
+
+    return is_sufficient, missing
 
 
 def validate_feature_safety(feature_names: List[str]) -> List[str]:
