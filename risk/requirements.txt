@@ -1,0 +1,9 @@
+# Risk-module dependencies (Rohit)
+# Install with: pip install -r risk/requirements.txt
+scikit-learn==1.9.0
+xgboost==3.4.1
+shap==0.52.0
+pandas==3.0.5
+numpy==2.5.2
+pytest==9.1.1
+jsonschema==4.26.0
