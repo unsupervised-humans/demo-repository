@@ -1,0 +1,209 @@
+{
+  "application_id": "APP-2026-004821",
+  "created_at": "2026-08-18T11:45:00Z",
+  "status": "scoring",
+  "applicant": {
+    "name": "Vikramaditya Sengupta",
+    "declared_income": 95000,
+    "loan_amount_requested": 3500000,
+    "loan_type": "personal"
+  },
+  "documents": [
+    {
+      "doc_id": "doc-01",
+      "file_path": "uploads/APP-2026-004821/payslip_july2026.pdf",
+      "type": "payslip",
+      "classification_confidence": 0.98,
+      "page_count": 1,
+      "is_synthetic": false
+    },
+    {
+      "doc_id": "doc-02",
+      "file_path": "uploads/APP-2026-004821/hdfc_bank_statement.pdf",
+      "type": "bank_statement",
+      "classification_confidence": 0.96,
+      "page_count": 3,
+      "is_synthetic": false
+    },
+    {
+      "doc_id": "doc-03",
+      "file_path": "uploads/APP-2026-004821/pan_card.pdf",
+      "type": "kyc_id",
+      "classification_confidence": 0.99,
+      "page_count": 1,
+      "is_synthetic": false
+    }
+  ],
+  "extracted_fields": [
+    {
+      "field_name": "gross_monthly_income",
+      "value": 95000,
+      "confidence": 0.97,
+      "source": {
+        "doc_id": "doc-01",
+        "page": 1,
+        "bbox": [
+          0.15,
+          0.35,
+          0.25,
+          0.04
+        ]
+      },
+      "needs_review": false
+    },
+    {
+      "field_name": "employer_name",
+      "value": "Apex Nexa Analytics Pvt Ltd",
+      "confidence": 0.96,
+      "source": {
+        "doc_id": "doc-01",
+        "page": 1,
+        "bbox": [
+          0.12,
+          0.22,
+          0.35,
+          0.04
+        ]
+      },
+      "needs_review": false
+    },
+    {
+      "field_name": "avg_monthly_deposit",
+      "value": 82000,
+      "confidence": 0.91,
+      "source": {
+        "doc_id": "doc-02",
+        "page": 2
+      },
+      "needs_review": false
+    },
+    {
+      "field_name": "applicant_name",
+      "value": "Vikramaditya Sengupta",
+      "confidence": 0.99,
+      "source": {
+        "doc_id": "doc-03",
+        "page": 1
+      },
+      "needs_review": false
+    },
+    {
+      "field_name": "education",
+      "value": "Graduate",
+      "confidence": 0.94,
+      "source": {
+        "doc_id": "doc-01",
+        "page": 1
+      },
+      "needs_review": false
+    }
+  ],
+  "validation_findings": [
+    {
+      "finding_id": "vf-101",
+      "severity": "warning",
+      "description": "Average bank deposits (82,000) are 13.7% lower than declared monthly income (95,000).",
+      "related_fields": [
+        "gross_monthly_income",
+        "avg_monthly_deposit"
+      ],
+      "doc_ids": [
+        "doc-01",
+        "doc-02"
+      ]
+    },
+    {
+      "finding_id": "vf-102",
+      "severity": "info",
+      "description": "Employer name on payslip matches registered entity in corporate database.",
+      "related_fields": [
+        "employer_name"
+      ],
+      "doc_ids": [
+        "doc-01"
+      ]
+    }
+  ],
+  "missing_documents": [],
+  "fraud_flags": [
+    {
+      "flag_id": "ff-001",
+      "severity": "low",
+      "description": "Font metadata variance detected on payslip footer, within normal PDF renderer variance.",
+      "evidence": "Header font: Helvetica, Footer font: ArialMT (differing font families).",
+      "doc_ids": [
+        "doc-01"
+      ]
+    }
+  ],
+  "risk_score": {
+    "approval_probability": 1.0,
+    "model_version": "risk-xgb-v1",
+    "factors": [
+      {
+        "feature": "cibil_score",
+        "contribution": 5.7782
+      },
+      {
+        "feature": "loan_to_income_ratio",
+        "contribution": 0.5993
+      },
+      {
+        "feature": "residential_assets_value",
+        "contribution": 0.5945
+      },
+      {
+        "feature": "commercial_assets_value",
+        "contribution": 0.5415
+      },
+      {
+        "feature": "loan_term",
+        "contribution": -0.5006
+      }
+    ]
+  },
+  "compliance": {
+    "bias_check_passed": true,
+    "protected_attributes_excluded": [
+      "gender",
+      "religion",
+      "caste",
+      "age"
+    ],
+    "notes": "Decision factors are all financial/document-based; no protected attributes used in scoring."
+  },
+  "summary_report": null,
+  "reviewer_decision": null,
+  "audit_log": [
+    {
+      "agent": "classifier",
+      "action": "classified 3 documents",
+      "timestamp": "2026-08-18T11:45:05Z"
+    },
+    {
+      "agent": "extraction",
+      "action": "extracted 5 fields with average confidence 0.954",
+      "timestamp": "2026-08-18T11:45:12Z"
+    },
+    {
+      "agent": "validation",
+      "action": "ran cross-document consistency checks; identified 1 warning",
+      "timestamp": "2026-08-18T11:45:18Z"
+    },
+    {
+      "agent": "fraud",
+      "action": "scanned documents for tampering artifacts; flagged 1 low severity issue",
+      "timestamp": "2026-08-18T11:45:20Z"
+    },
+    {
+      "agent": "risk_scoring",
+      "action": "computed approval probability",
+      "timestamp": "2026-08-18T06:15:13Z"
+    },
+    {
+      "agent": "compliance",
+      "action": "ran fairness check",
+      "timestamp": "2026-08-18T06:15:13Z"
+    }
+  ]
+}

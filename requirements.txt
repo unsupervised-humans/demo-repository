@@ -16,3 +16,10 @@ jsonschema>=4.0.0      # Schema validation (shared/schema_loader.py)
 
 # Development / test:
 pytest>=7.0.0
+
+# Risk assessment & compliance dependencies (risk/):
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+shap>=0.44.0
+pandas>=2.0.0
+numpy>=1.24.0
