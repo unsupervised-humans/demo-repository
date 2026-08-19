@@ -515,7 +515,7 @@ function renderResult(lf){
     </div>`;}).join('')||'<div style="padding:20px;color:var(--text3);font-size:13px">No fields extracted</div>';
 
   // Review reasons
-  const revHtml=buildReviewReasons(reviewReasons,missing,fields,fraud,compliance,risk);
+  const revHtml=buildReviewReasons(reviewReasons,missing,fields,fraud,compliance,risk,hiConf,docs,defaultedFields);
 
   // Missing docs tags
   const missHtml=missing.length?`<div class="miss-tags">${missing.map(m=>`<span class="miss-tag">📎 ${m.document_type||m}</span>`).join('')}</div>`:'';
@@ -704,10 +704,19 @@ function formatFeatureValue(name,value){
 
 function buildRiskExplain(featureSnapshot,defaultedFields,factors,status,prob,dataNote){
   const keys=['income_annum','loan_amount','loan_to_income_ratio','cibil_score'];
-  const cards=keys.filter(k=>featureSnapshot[k]!=null).map(k=>`<div class="risk-mini">
+  const cibilTier=featureSnapshot.cibil_tier||null;
+  const cibilDefaulted=(defaultedFields||[]).includes('cibil_score');
+  const cards=keys.filter(k=>featureSnapshot[k]!=null).map(k=>{
+    const isCibil=k==='cibil_score';
+    const tierBadge=isCibil&&cibilTier&&!cibilDefaulted
+      ?`<div class="cibil-tier-badge" style="background:${cibilTier.color}22;border:1px solid ${cibilTier.color}55;color:${cibilTier.color};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px;display:inline-block;letter-spacing:.4px;text-transform:uppercase">${cibilTier.label}</div>`
+      :isCibil&&cibilDefaulted?`<div style="font-size:10px;color:var(--amber);margin-top:4px">⚠️ Not extracted</div>`
+      :'';
+    return `<div class="risk-mini">
       <div class="risk-mini-label">${formatFeatureName(k)}</div>
-      <div class="risk-mini-value">${formatFeatureValue(k,featureSnapshot[k])}</div>
-    </div>`).join('');
+      <div class="risk-mini-value">${formatFeatureValue(k,featureSnapshot[k])}${tierBadge}</div>
+    </div>`;
+  }).join('');
   let copy='';
   if(status==='INSUFFICIENT_DATA'){
     copy='The model did not produce a score because the core financial inputs needed for a meaningful decision were missing.';
@@ -726,22 +735,38 @@ function buildRiskExplain(featureSnapshot,defaultedFields,factors,status,prob,da
   return `${cards?`<div class="risk-explain">${cards}</div>`:''}${copy?`<div class="risk-summary-copy">${copy}</div>`:''}`;
 }
 
-function buildReviewReasons(reasons,missing,fields,fraud,compliance,risk){
+function buildReviewReasons(reasons,missing,fields,fraud,compliance,risk,hiConf,docs,defaultedFields){
   const items=[];
   reasons.forEach(r=>{
     const isHigh=r.toLowerCase().includes('fraud')||r.toLowerCase().includes('critical')||r.toLowerCase().includes('failed');
     items.push({text:r,level:isHigh?'high':'medium',icon:isHigh?'🚨':'⚠️'});
   });
   if(!items.length){
-    const goodFields=fields.filter(f=>f.value!=null&&!f.needs_review&&!String(f.field_name||'').startsWith('extraction_failure_')).length;
+    const totalExtracted=fields.filter(f=>f.value!=null&&!String(f.field_name||'').startsWith('extraction_failure_')).length;
+    const docTypes=(docs||[]).map(d=>(d.type||d.document_type||'unknown').replace(/_/g,' ')).filter(Boolean);
+    const cibilDefaulted=(defaultedFields||[]).includes('cibil_score');
+    const prob=risk.approval_probability;
+    const probPct=prob!=null?Math.round(prob*100):null;
     const checks=[
-      `${goodFields} extracted values were captured with solid confidence`,
-      `${missing.length?'Some documents are still missing':'Required documents appear present'}`,
-      `${fraud.length?'Fraud checks raised signals':'No fraud signals were raised'}`,
-      `${compliance.bias_check_passed===false?'Compliance needs attention':'Compliance checks passed'}`,
-      `${risk.status==='ok'&&risk.approval_probability!=null?'Risk model produced a '+Math.round(risk.approval_probability*100)+'% approval score':'Risk score is waiting on better input data'}`
+      totalExtracted>0
+        ? `${totalExtracted} field${totalExtracted!==1?'s':''} extracted — ${hiConf||0} with high confidence`
+        : `No fields extracted from uploaded documents`,
+      missing.length
+        ? `${missing.length} required document${missing.length!==1?'s':''} still missing`
+        : docTypes.length
+          ? `${docTypes.length} document${docTypes.length!==1?'s':''} received: ${docTypes.join(', ')}`
+          : `Required documents appear present`,
+      fraud.length
+        ? `${fraud.length} fraud signal${fraud.length!==1?'s':''} raised — review required`
+        : `No fraud signals detected`,
+      compliance.bias_check_passed===false
+        ? `Compliance bias check flagged — review protected attributes`
+        : `Compliance checks passed — no protected attributes used`,
+      risk.status==='ok'&&probPct!=null
+        ? `Risk model score: ${probPct}% approval probability${cibilDefaulted?' (⚠️ CIBIL score not extracted — model used dataset median 600)':''}`
+        : `Risk score unavailable — upload income documents to enable scoring`
     ];
-    return `<div class="all-clear">✅ No review blockers detected</div>
+    return `<div class="all-clear">✅ No automated review blockers detected</div>
     <div class="review-list">${checks.map(t=>`<div class="rev-item rev-good"><span class="rev-icon">•</span><span>${t}</span></div>`).join('')}</div>`;
   }
   return `<div class="review-list">
