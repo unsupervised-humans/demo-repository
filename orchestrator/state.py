@@ -180,3 +180,56 @@ def requires_human_review(
             reasons.append("Compliance: bias check failed")
 
     return bool(reasons), reasons
+
+
+def apply_reviewer_decision(
+    loan_file: dict[str, Any],
+    *,
+    decision: str,
+    reviewer: str,
+    notes: str = "",
+) -> None:
+    """Apply a human review decision and record audit history.
+
+    Raises
+    ------
+    ValueError
+        If the same final decision was already recorded.
+    """
+    from orchestrator.audit import append_audit
+
+    existing_decision = (loan_file.get("reviewer_decision") or {}).get("decision")
+    if existing_decision is not None:
+        if existing_decision == decision:
+            append_audit(
+                loan_file,
+                f"duplicate human review decision ignored: {decision} by {reviewer}",
+                agent="reviewer",
+            )
+            raise ValueError(f"Application already marked as {decision}.")
+
+        append_audit(
+            loan_file,
+            f"human review decision updated: {existing_decision} -> {decision} by {reviewer}",
+            agent="reviewer",
+        )
+
+    loan_file["reviewer_decision"] = {
+        "decision": decision,
+        "reviewer": reviewer,
+        "decided_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "notes": notes,
+    }
+
+    status_map = {
+        "approved": "approved",
+        "rejected": "rejected",
+        "more_docs_requested": "more_docs_requested",
+    }
+    loan_file["status"] = status_map[decision]
+
+    append_audit(
+        loan_file,
+        f"human review completed: {decision} by {reviewer}",
+        agent="reviewer",
+    )

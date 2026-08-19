@@ -55,6 +55,21 @@ header{background:linear-gradient(135deg,rgba(15,23,42,.97) 0%,rgba(8,11,18,.99)
   border:1px solid transparent;margin-bottom:4px;transition:all .2s;position:relative}
 .loan-card:hover{background:var(--surface);border-color:var(--border)}
 .loan-card.active{background:var(--surface2);border-color:var(--accent)}
+.loan-card.loan-approved{background:linear-gradient(90deg,#10b98116,transparent 70%)}
+.loan-card.loan-rejected{background:linear-gradient(90deg,#ef444416,transparent 70%)}
+.loan-card.loan-more-docs{background:linear-gradient(90deg,#f59e0b16,transparent 70%)}
+.loan-card.loan-approved .lc-name{color:#86efac}
+.loan-card.loan-rejected .lc-name{color:#fca5a5}
+.loan-card.loan-more-docs .lc-name{color:#fcd34d}
+.loan-card.loan-approved .lc-prob{color:#6ee7b7}
+.loan-card.loan-rejected .lc-prob{color:#fda4af}
+.loan-card.loan-more-docs .lc-prob{color:#fbbf24}
+.loan-card.loan-approved::after,.loan-card.loan-rejected::after,.loan-card.loan-more-docs::after{
+  content:'';position:absolute;left:14px;right:14px;bottom:8px;height:3px;border-radius:999px;opacity:.95
+}
+.loan-card.loan-approved::after{background:linear-gradient(90deg,#10b981,#34d399)}
+.loan-card.loan-rejected::after{background:linear-gradient(90deg,#ef4444,#f87171)}
+.loan-card.loan-more-docs::after{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
 .loan-card.active::before{content:'';position:absolute;left:0;top:10%;height:80%;
   width:3px;background:var(--accent);border-radius:0 2px 2px 0}
 .lc-id{font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text3);margin-bottom:5px}
@@ -172,6 +187,11 @@ header{background:linear-gradient(135deg,rgba(15,23,42,.97) 0%,rgba(8,11,18,.99)
 .risk-note{font-size:11.5px;color:var(--text3);padding:10px 14px;
   background:var(--surface2);border-radius:8px;border-left:3px solid var(--accent);
   margin-top:12px;line-height:1.5}
+.risk-explain{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:14px}
+.risk-mini{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px}
+.risk-mini-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.risk-mini-value{font-size:14px;color:var(--text);font-weight:700}
+.risk-summary-copy{margin-top:12px;font-size:12px;color:var(--text2);line-height:1.6}
 .insuf-box{text-align:center;padding:24px 16px;color:var(--text3);
   background:var(--surface2);border-radius:10px}
 .insuf-icon{font-size:28px;margin-bottom:8px}
@@ -191,6 +211,7 @@ header{background:linear-gradient(135deg,rgba(15,23,42,.97) 0%,rgba(8,11,18,.99)
   border-radius:8px;font-size:12.5px;line-height:1.5}
 .rev-high{background:#ef444410;border:1px solid #ef444425;color:#fca5a5}
 .rev-medium{background:#f59e0b10;border:1px solid #f59e0b25;color:#fcd34d}
+.rev-good{background:#10b98110;border:1px solid #10b98125;color:#bbf7d0}
 .rev-info{background:#3b82f610;border:1px solid #3b82f625;color:#93c5fd}
 .rev-icon{font-size:13px;flex-shrink:0;margin-top:1px}
 .all-clear{display:flex;align-items:center;gap:10px;color:var(--green);font-size:13px;
@@ -271,6 +292,34 @@ header{background:linear-gradient(135deg,rgba(15,23,42,.97) 0%,rgba(8,11,18,.99)
 .toast.success{background:#10b981;color:#fff;box-shadow:0 8px 24px #10b98140}
 .toast.error{background:#ef4444;color:#fff;box-shadow:0 8px 24px #ef444440}
 .toast.info{background:#3b82f6;color:#fff;box-shadow:0 8px 24px #3b82f640}
+
+/* QA CHATBOT */
+.qa-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.qa-messages{padding:16px;display:flex;flex-direction:column;gap:10px;min-height:120px;max-height:320px;overflow-y:auto}
+.qa-msg{display:flex;gap:10px;align-items:flex-start}
+.qa-msg.user{flex-direction:row-reverse}
+.qa-bubble{padding:10px 14px;border-radius:12px;font-size:12.5px;line-height:1.6;max-width:82%}
+.qa-msg.bot .qa-bubble{background:var(--surface2);border:1px solid var(--border2);color:var(--text)}
+.qa-msg.user .qa-bubble{background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff}
+.qa-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px}
+.qa-msg.bot .qa-avatar{background:var(--surface2);border:1px solid var(--border2)}
+.qa-msg.user .qa-avatar{background:linear-gradient(135deg,var(--accent),var(--purple))}
+.qa-sources{margin-top:6px;font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.qa-conf{display:inline-block;font-size:9.5px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600}
+.qa-conf.high{background:#10b98120;color:#10b981}.qa-conf.medium{background:#f59e0b20;color:#f59e0b}.qa-conf.low{background:#ef444420;color:#ef4444}
+.qa-input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface2)}
+.qa-input{flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:9px 14px;
+  color:var(--text);font-size:12.5px;font-family:'Inter',sans-serif;outline:none;transition:border .2s}
+.qa-input:focus{border-color:var(--accent)}
+.qa-input::placeholder{color:var(--text3)}
+.qa-send{background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:8px;
+  padding:9px 16px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap}
+.qa-send:hover{transform:translateY(-1px);box-shadow:0 4px 12px #3b82f640}
+.qa-send:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.qa-typing{display:flex;gap:4px;align-items:center;padding:4px 0}
+.qa-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:qabounce .9s ease infinite}
+.qa-dot:nth-child(2){animation-delay:.15s}.qa-dot:nth-child(3){animation-delay:.3s}
+@keyframes qabounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 </style>
 </head>
 <body>
@@ -405,12 +454,17 @@ async function loadLoanList(){
       const prob=l.approval_probability;
       const probStr=prob!=null?(prob*100).toFixed(0)+'% approval':'Scoring pending';
       const rec=l.recommendation||'';
+      const status=l.status||'pending';
       let bc='badge-pending',rl=l.status||'pending';
       if(rec==='approve'){bc='badge-approve';rl='Approve';}
       else if(rec==='reject'){bc='badge-reject';rl='Reject';}
       else if(rec==='request_more_info'){bc='badge-review';rl='More Info';}
+      const stateClass=
+        status==='approved'?' loan-approved':
+        status==='rejected'?' loan-rejected':
+        status==='more_docs_requested'?' loan-more-docs':'';
       const active=l.application_id===currentAppId?' active':'';
-      return `<div class="loan-card${active}" onclick="selectLoan('${l.application_id}')">
+      return `<div class="loan-card${stateClass}${active}" onclick="selectLoan('${l.application_id}')">
         <div class="lc-id">${l.application_id}</div>
         <div class="lc-name">${l.applicant_name||'Unknown Applicant'}</div>
         <div class="lc-badges"><span class="badge ${bc}">${rl}</span>${l.needs_review?'<span class="badge badge-review">Review</span>':''}</div>
@@ -447,7 +501,11 @@ function renderResult(lf){
   const compliance=lf.compliance||{};
   const reviewReasons=lf._review_reasons||[];
   const auditLog=lf.audit_log||[];
+  const reviewerDecision=lf.reviewer_decision||null;
+  const finalDecisionLocked=!!(reviewerDecision&&['approved','rejected','more_docs_requested'].includes(reviewerDecision.decision));
   const prob=risk.approval_probability;const riskStatus=risk.status;
+  const featureSnapshot=risk.feature_snapshot||{};
+  const defaultedFields=risk.defaulted_fields||[];
   const factors=(risk.factors||[]).sort((a,b)=>Math.abs(b.contribution)-Math.abs(a.contribution)).slice(0,6);
   const rec=summary.recommendation||'request_more_info';
   const recMap={approve:{label:'✅ Approve',cls:'chip-approve'},reject:{label:'❌ Reject',cls:'chip-reject'},request_more_info:{label:'⚠️ Request More Info',cls:'chip-review'}};
@@ -464,12 +522,13 @@ function renderResult(lf){
   const maxAbs=factors.reduce((m,f)=>Math.max(m,Math.abs(f.contribution)),0.01);
   const factorHtml=factors.length?factors.map(f=>{
     const isPos=f.contribution>=0;const pct=Math.min(100,(Math.abs(f.contribution)/maxAbs)*100);
-    const nm=(f.feature||'?').replace(/_/g,' ');
+    const nm=formatFeatureName(f.feature||'?');
     return `<div class="factor-row">
       <div class="factor-name" title="${f.feature||''}">${nm}</div>
       <div class="factor-bar-wrap"><div class="factor-bar ${isPos?'fbar-pos':'fbar-neg'}" style="width:${pct}%"></div></div>
       <div class="factor-val ${isPos?'fval-pos':'fval-neg'}">${isPos?'+':''}${f.contribution.toFixed(3)}</div>
     </div>`;}).join(''):'<div style="color:var(--text3);font-size:13px">No factors available</div>';
+  const riskExplainHtml=buildRiskExplain(featureSnapshot,defaultedFields,factors,riskStatus,prob,risk.data_completeness_note);
 
   // Fields table
   const allF=[...goodFields,...fields.filter(f=>f.value==null&&!String(f.field_name||'').startsWith('extraction_failure_'))];
@@ -484,7 +543,7 @@ function renderResult(lf){
     </div>`;}).join('')||'<div style="padding:20px;color:var(--text3);font-size:13px">No fields extracted</div>';
 
   // Review reasons
-  const revHtml=buildReviewReasons(reviewReasons,missing);
+  const revHtml=buildReviewReasons(reviewReasons,missing,fields,fraud,compliance,risk,hiConf,docs,defaultedFields);
 
   // Missing docs tags
   const missHtml=missing.length?`<div class="miss-tags">${missing.map(m=>`<span class="miss-tag">📎 ${m.document_type||m}</span>`).join('')}</div>`:'';
@@ -554,10 +613,11 @@ function renderResult(lf){
       <div class="risk-gauge-wrap">
         <div class="gauge-block">${gaugeHtml}<div class="gauge-lbl">Approval Probability</div></div>
         <div class="factors-grid">
-          <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">SHAP Feature Contributions</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Top Drivers Behind The Score</div>
           ${factorHtml}
         </div>
       </div>
+      ${riskExplainHtml}
       ${risk.data_completeness_note?`<div class="risk-note">ℹ️ ${risk.data_completeness_note}</div>`:''}
     </div>
 
@@ -594,12 +654,13 @@ function renderResult(lf){
     <div class="panel">
       <div class="panel-title">Human Decision</div>
       <div class="dec-sub">Override the AI recommendation with your final underwriting decision.</div>
+      ${reviewerDecision?`<div class="rev-item rev-info"><span class="rev-icon">ℹ️</span><span>Current decision: ${(reviewerDecision.decision||'').replace(/_/g,' ')} by ${reviewerDecision.reviewer||'Reviewer'}</span></div>`:''}
       <input class="rev-input" id="reviewer-name" placeholder="Your name / reviewer ID"/>
       <textarea class="rev-input" id="reviewer-notes" placeholder="Notes (optional)" rows="2" style="resize:vertical;margin-top:6px"></textarea>
       <div class="dec-btns">
-        <button class="btn-dec btn-approve" onclick="submitDecision('approved')">✅ Approve</button>
-        <button class="btn-dec btn-reject" onclick="submitDecision('rejected')">❌ Reject</button>
-        <button class="btn-dec btn-more" onclick="submitDecision('more_docs_requested')">📎 Request More</button>
+        <button class="btn-dec btn-approve" onclick="submitDecision('approved')" ${finalDecisionLocked?'disabled':''}>✅ Approve</button>
+        <button class="btn-dec btn-reject" onclick="submitDecision('rejected')" ${finalDecisionLocked?'disabled':''}>❌ Reject</button>
+        <button class="btn-dec btn-more" onclick="submitDecision('more_docs_requested')" ${finalDecisionLocked?'disabled':''}>📎 Request More</button>
       </div>
     </div>
 
@@ -609,6 +670,17 @@ function renderResult(lf){
         <div class="coll-arrow">▾</div>
       </div>
       <div class="coll-body"><div class="audit-body">${auditHtml}</div></div>
+    </div>
+
+    <div class="qa-panel">
+      <div class="panel-title" style="padding:20px 22px 0;margin-bottom:12px">Document Q&amp;A Assistant</div>
+      <div class="qa-messages" id="qa-messages-${appId}">
+        <div class="qa-msg bot"><div class="qa-avatar">🤖</div><div class="qa-bubble">Hello! I've analysed this application. Ask me anything about the extracted data, risk factors, validation findings, or documents.</div></div>
+      </div>
+      <div class="qa-input-row">
+        <input class="qa-input" id="qa-input-${appId}" placeholder="Ask about this application… e.g. What is the applicant's income?" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQA('${appId}');}"/>
+        <button class="qa-send" id="qa-send-${appId}" onclick="sendQA('${appId}')">Send ↵</button>
+      </div>
     </div>
   `;
 
@@ -638,13 +710,104 @@ function buildGauge(prob,status){
     <div class="gauge-num" style="color:${nc}">${pct}%</div>
   </div>`;}
 
-function buildReviewReasons(reasons,missing){
+function formatFeatureName(name){
+  const labels={
+    cibil_score:'CIBIL score',
+    income_annum:'Annual income',
+    loan_amount:'Loan amount',
+    loan_term:'Loan term',
+    loan_to_income_ratio:'Loan-to-income ratio',
+    no_of_dependents:'Dependents',
+    self_employed:'Self employed',
+    bank_asset_value:'Bank assets',
+    residential_assets_value:'Residential assets',
+    commercial_assets_value:'Commercial assets',
+    luxury_assets_value:'Luxury assets',
+    education:'Education'
+  };
+  return labels[name]||String(name||'?').replace(/_/g,' ');
+}
+
+function formatFeatureValue(name,value){
+  if(value==null||value==='')return 'N/A';
+  if(['income_annum','loan_amount','bank_asset_value','residential_assets_value','commercial_assets_value','luxury_assets_value'].includes(name)){
+    return '₹'+Number(value).toLocaleString('en-IN');
+  }
+  if(name==='loan_to_income_ratio')return Number(value).toFixed(2)+'x';
+  if(name==='cibil_score')return String(Math.round(Number(value)));
+  if(name==='loan_term')return Number(value).toFixed(0)+' years';
+  if(name==='education')return Number(value)>=1?'Graduate':'Not graduate';
+  if(name==='self_employed')return Number(value)>=1?'Yes':'No';
+  return String(value);
+}
+
+function buildRiskExplain(featureSnapshot,defaultedFields,factors,status,prob,dataNote){
+  const keys=['income_annum','loan_amount','loan_to_income_ratio','cibil_score'];
+  const cibilTier=featureSnapshot.cibil_tier||null;
+  const cibilDefaulted=(defaultedFields||[]).includes('cibil_score');
+  const cards=keys.filter(k=>featureSnapshot[k]!=null).map(k=>{
+    const isCibil=k==='cibil_score';
+    const tierBadge=isCibil&&cibilTier&&!cibilDefaulted
+      ?`<div class="cibil-tier-badge" style="background:${cibilTier.color}22;border:1px solid ${cibilTier.color}55;color:${cibilTier.color};border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px;display:inline-block;letter-spacing:.4px;text-transform:uppercase">${cibilTier.label}</div>`
+      :isCibil&&cibilDefaulted?`<div style="font-size:10px;color:var(--amber);margin-top:4px">⚠️ Not extracted</div>`
+      :'';
+    return `<div class="risk-mini">
+      <div class="risk-mini-label">${formatFeatureName(k)}</div>
+      <div class="risk-mini-value">${formatFeatureValue(k,featureSnapshot[k])}${tierBadge}</div>
+    </div>`;
+  }).join('');
+  let copy='';
+  if(status==='INSUFFICIENT_DATA'){
+    copy='The model did not produce a score because the core financial inputs needed for a meaningful decision were missing.';
+  }else if(prob!=null){
+    const top=factors.slice(0,3).map(f=>{
+      const dir=f.contribution>=0?'helped':'pulled down';
+      return `${formatFeatureName(f.feature)} ${dir} the approval score`;
+    });
+    copy=`This score is based on the extracted financial inputs above.${top.length?' The strongest drivers were '+top.join(', ')+'.':''}`;
+  }
+  if(defaultedFields.length){
+    copy+=` Some inputs were not found in the documents and were defaulted: ${defaultedFields.map(formatFeatureName).join(', ')}.`;
+  }else if(dataNote&&status!=='INSUFFICIENT_DATA'){
+    copy+=` ${dataNote}`;
+  }
+  return `${cards?`<div class="risk-explain">${cards}</div>`:''}${copy?`<div class="risk-summary-copy">${copy}</div>`:''}`;
+}
+
+function buildReviewReasons(reasons,missing,fields,fraud,compliance,risk,hiConf,docs,defaultedFields){
   const items=[];
   reasons.forEach(r=>{
     const isHigh=r.toLowerCase().includes('fraud')||r.toLowerCase().includes('critical')||r.toLowerCase().includes('failed');
     items.push({text:r,level:isHigh?'high':'medium',icon:isHigh?'🚨':'⚠️'});
   });
-  if(!items.length)return `<div class="all-clear">✅ No review issues — application looks clean</div>`;
+  if(!items.length){
+    const totalExtracted=fields.filter(f=>f.value!=null&&!String(f.field_name||'').startsWith('extraction_failure_')).length;
+    const docTypes=(docs||[]).map(d=>(d.type||d.document_type||'unknown').replace(/_/g,' ')).filter(Boolean);
+    const cibilDefaulted=(defaultedFields||[]).includes('cibil_score');
+    const prob=risk.approval_probability;
+    const probPct=prob!=null?Math.round(prob*100):null;
+    const checks=[
+      totalExtracted>0
+        ? `${totalExtracted} field${totalExtracted!==1?'s':''} extracted — ${hiConf||0} with high confidence`
+        : `No fields extracted from uploaded documents`,
+      missing.length
+        ? `${missing.length} required document${missing.length!==1?'s':''} still missing`
+        : docTypes.length
+          ? `${docTypes.length} document${docTypes.length!==1?'s':''} received: ${docTypes.join(', ')}`
+          : `Required documents appear present`,
+      fraud.length
+        ? `${fraud.length} fraud signal${fraud.length!==1?'s':''} raised — review required`
+        : `No fraud signals detected`,
+      compliance.bias_check_passed===false
+        ? `Compliance bias check flagged — review protected attributes`
+        : `Compliance checks passed — no protected attributes used`,
+      risk.status==='ok'&&probPct!=null
+        ? `Risk model score: ${probPct}% approval probability${cibilDefaulted?' (⚠️ CIBIL score not extracted — model used dataset median 600)':''}`
+        : `Risk score unavailable — upload income documents to enable scoring`
+    ];
+    return `<div class="all-clear">✅ No automated review blockers detected</div>
+    <div class="review-list">${checks.map(t=>`<div class="rev-item rev-good"><span class="rev-icon">•</span><span>${t}</span></div>`).join('')}</div>`;
+  }
   return `<div class="review-list">
     ${items.slice(0,8).map(i=>`<div class="rev-item rev-${i.level}"><span class="rev-icon">${i.icon}</span><span>${i.text}</span></div>`).join('')}
     ${items.length>8?`<div class="rev-item rev-info"><span class="rev-icon">ℹ️</span><span>+${items.length-8} more review points</span></div>`:''}
@@ -656,14 +819,75 @@ function toggleColl(header){
 
 async function submitDecision(decision){
   if(!currentAppId){showToast('No application selected','error');return;}
+  const currentLoan=allLoans[currentAppId]||{};
+  if(currentLoan.reviewer_decision?.decision){
+    showToast('A final decision is already recorded for this application','error');
+    return;
+  }
   const reviewer=document.getElementById('reviewer-name')?.value?.trim()||'Reviewer';
   const notes=document.getElementById('reviewer-notes')?.value?.trim()||'';
+  const buttons=Array.from(document.querySelectorAll('.btn-dec'));
+  buttons.forEach(b=>b.disabled=true);
   try{const r=await fetch(API+'/api/review/'+currentAppId+'/decision',{method:'POST',
     headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,reviewer,notes})});
-    if(!r.ok)throw new Error(await r.text());
+    if(!r.ok){
+      let msg='Request failed';
+      try{
+        const err=await r.json();
+        msg=err.detail||JSON.stringify(err);
+      }catch{
+        msg=await r.text();
+      }
+      throw new Error(msg);
+    }
     const dl={approved:'Approved ✅',rejected:'Rejected ❌',more_docs_requested:'More docs requested 📎'};
-    showToast('Decision recorded: '+(dl[decision]||decision),'success');await loadLoanList();}
+    const fr=await fetch(API+'/api/pipeline/'+currentAppId+'/result');
+    const full=await fr.json();
+    allLoans[currentAppId]=full;
+    showToast('Decision recorded: '+(dl[decision]||decision),'success');
+    await loadLoanList();
+    renderResult(full);}
   catch(e){showToast('Failed: '+e.message,'error');}
+  finally{
+    const latest=allLoans[currentAppId]||{};
+    if(!(latest.reviewer_decision&&latest.reviewer_decision.decision)){
+      buttons.forEach(b=>b.disabled=false);
+    }
+  }
+}
+
+
+async function sendQA(appId){
+  const input=document.getElementById('qa-input-'+appId);
+  const sendBtn=document.getElementById('qa-send-'+appId);
+  const msgBox=document.getElementById('qa-messages-'+appId);
+  const q=(input.value||'').trim();
+  if(!q||!appId){return;}
+  // User bubble
+  msgBox.innerHTML+=`<div class="qa-msg user"><div class="qa-avatar">👤</div><div class="qa-bubble">${q.replace(/</g,'&lt;')}</div></div>`;
+  input.value='';sendBtn.disabled=true;
+  // Typing indicator
+  const typingId='qa-typing-'+Date.now();
+  msgBox.innerHTML+=`<div class="qa-msg bot" id="${typingId}"><div class="qa-avatar">🤖</div><div class="qa-bubble"><div class="qa-typing"><div class="qa-dot"></div><div class="qa-dot"></div><div class="qa-dot"></div></div></div></div>`;
+  msgBox.scrollTop=msgBox.scrollHeight;
+  try{
+    const r=await fetch(API+'/api/review/'+appId+'/question',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q})});
+    const data=await r.json();
+    document.getElementById(typingId)?.remove();
+    const ans=data.answer||'I cannot determine this from the available documents.';
+    const conf=data.confidence||'low';
+    const srcs=(data.sources||[]).map(s=>`${s.doc_id} p.${s.page}`).join(', ');
+    const confBadge=`<span class="qa-conf ${conf}">${conf.toUpperCase()}</span>`;
+    const srcLine=srcs?`<div class="qa-sources">📎 ${srcs}</div>`:'';
+    msgBox.innerHTML+=`<div class="qa-msg bot"><div class="qa-avatar">🤖</div><div class="qa-bubble">${ans.replace(/</g,'&lt;').replace(/\n/g,'<br>')}${confBadge}${srcLine}</div></div>`;
+  }catch(e){
+    document.getElementById(typingId)?.remove();
+    msgBox.innerHTML+=`<div class="qa-msg bot"><div class="qa-avatar">🤖</div><div class="qa-bubble" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }finally{
+    sendBtn.disabled=false;msgBox.scrollTop=msgBox.scrollHeight;
+  }
 }
 
 function showToast(msg,type='info'){

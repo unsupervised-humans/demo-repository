@@ -97,6 +97,7 @@ def bank_statement_prompt(doc_id: str) -> str:
         "- total_credits          (number, sum of all credits in the statement period)\n"
         "- total_debits           (number, sum of all debits in the statement period)\n"
         "- ifsc_code              (string, if present)\n"
+        "- cibil_score            (number 300-900, CIBIL/credit score if printed on the statement)\n"
         "Extract only fields that are actually present. "
         "If a field is missing or illegible, include it with value=null and confidence<=0.3."
         + _JSON_REMINDER
@@ -192,6 +193,26 @@ def other_document_prompt(doc_id: str, doc_type: str) -> str:
     )
 
 
+def credit_report_prompt(doc_id: str) -> str:
+    """Prompt for credit report / CIBIL report documents."""
+    return (
+        f"This is a credit report or CIBIL report (doc_id={doc_id!r}). Extract the following fields:\n"
+        "- applicant_name          (string)\n"
+        "- cibil_score             (number 300-900, the overall CIBIL / credit score)\n"
+        "- credit_score            (number 300-900, alias for cibil_score if labelled differently)\n"
+        "- report_date             (date YYYY-MM-DD)\n"
+        "- total_outstanding_debt  (number, total outstanding balance across all accounts)\n"
+        "- number_of_accounts      (number, total credit accounts)\n"
+        "- number_of_active_accounts (number)\n"
+        "- overdue_accounts        (number, accounts with overdue payments)\n"
+        "- enquiries_last_6_months (number)\n"
+        "- pan_number              (string, if present)\n"
+        "Extract only fields that are actually present. "
+        "If a field is missing or illegible, include it with value=null and confidence<=0.3."
+        + _JSON_REMINDER
+    )
+
+
 def combined_loan_package_prompt(doc_id: str, sections: list[str] | None = None) -> str:
     """Prompt for combined multi-section loan documents.
 
@@ -245,6 +266,11 @@ def combined_loan_package_prompt(doc_id: str, sections: list[str] | None = None)
         "- closing_balance         (number)\n"
         "- avg_monthly_deposit     (number)\n"
         "- avg_monthly_withdrawal  (number)\n\n"
+        "--- CREDIT / CIBIL REPORT fields (if present) ---\n"
+        "- cibil_score             (number 300-900, CIBIL or credit score)\n"
+        "- credit_score            (number 300-900, alias if labelled differently)\n"
+        "- total_outstanding_debt  (number)\n"
+        "- overdue_accounts        (number)\n\n"
         "--- KYC / IDENTITY DOCUMENT fields ---\n"
         "- id_number               (string)\n"
         "- id_document_type        (string)\n"
@@ -267,6 +293,45 @@ def combined_loan_package_prompt(doc_id: str, sections: list[str] | None = None)
     )
 
 
+def application_form_prompt(doc_id: str) -> str:
+    """Prompt for loan application forms (the main applicant-filled form).
+
+    Application forms typically contain a dedicated CIBIL / credit score
+    section, personal details, income declaration, and loan requirements.
+    """
+    return (
+        f"This is a loan application form (doc_id={doc_id!r}). Extract the following fields:\\n"
+        "--- APPLICANT DETAILS ---\\n"
+        "- applicant_name          (string, full name as written)\\n"
+        "- date_of_birth           (date YYYY-MM-DD)\\n"
+        "- pan_number              (string)\\n"
+        "- mobile_number           (string)\\n"
+        "- email                   (string)\\n"
+        "- address_line1           (string)\\n"
+        "- address_city            (string)\\n"
+        "- address_state           (string)\\n"
+        "- address_pincode         (string)\\n"
+        "- education               (string, e.g. Graduate, Post Graduate)\\n"
+        "- no_of_dependents        (number)\\n"
+        "--- EMPLOYMENT & INCOME ---\\n"
+        "- employment_type         (string, e.g. salaried, self_employed)\\n"
+        "- employer_name           (string)\\n"
+        "- designation             (string)\\n"
+        "- annual_income           (number, annual gross income in INR)\\n"
+        "- declared_income         (number, monthly or annual income declared)\\n"
+        "--- LOAN DETAILS ---\\n"
+        "- loan_amount_requested   (number, in INR)\\n"
+        "- loan_type               (string, e.g. home, personal, auto)\\n"
+        "- loan_term               (number, in years)\\n"
+        "--- CREDIT / CIBIL SECTION ---\\n"
+        "- cibil_score             (number 300-900, the CIBIL credit score shown in the application)\\n"
+        "- credit_score            (number 300-900, use if labelled credit score instead of CIBIL)\\n"
+        "Extract only fields that are actually present. "
+        "If a field is missing or illegible, include it with value=null and confidence<=0.3."
+        + _JSON_REMINDER
+    )
+
+
 # ── Router ─────────────────────────────────────────────────────────────────────
 
 _PROMPT_MAP: dict[str, object] = {
@@ -278,7 +343,9 @@ _PROMPT_MAP: dict[str, object] = {
     "address_proof": address_proof_prompt,
     "employment_proof": employment_proof_prompt,
     "combined_loan_package": combined_loan_package_prompt,
-    "application_form": other_document_prompt,
+    "application_form": application_form_prompt,
+    "credit_report": credit_report_prompt,
+    "cibil_report": credit_report_prompt,   # alias
 }
 
 

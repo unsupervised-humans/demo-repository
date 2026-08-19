@@ -1,30 +1,71 @@
 # LoanIQ extraction pipeline dependencies
-# Install with: pip install -r requirements.txt
+# Install with:
+#   python -m pip install -r requirements.txt
+
+# ============================================================
+# API / Backend
+# ============================================================
+
+fastapi==0.141.1
+uvicorn==0.52.3
+starlette==1.6.0
+pydantic-core==2.46.4
+annotated-doc==0.0.5
+annotated-types==0.8.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+
+# Uvicorn / FastAPI dependencies
+click==8.4.2
+h11==0.16.0
+anyio==4.14.2
+idna==3.19
+colorama==0.4.6
+
+
+# ============================================================
+# LLM / Extraction Pipeline
+# ============================================================
+
+openai>=1.0.0
+jsonschema>=4.0.0
+
+
+# ============================================================
+# PDF / OCR
+# ============================================================
+
+# Optional — needed only when processing real PDF/image documents:
+# pdfminer.six>=20221105
+# pytesseract>=0.3.0
+# Pillow>=9.0.0
+
+# NOTE:
+# pytesseract also requires the Tesseract binary.
 #
-# Required — must be installed for the extraction pipeline to run:
-openai>=1.0.0          # xAI Grok client (OpenAI-compatible SDK)
-jsonschema>=4.0.0      # Schema validation (shared/schema_loader.py)
+# Windows:
+# https://github.com/UB-Mannheim/tesseract/wiki
+#
+# Ubuntu/Debian:
+# sudo apt install tesseract-ocr
+#
+# macOS:
+# brew install tesseract
 
-# Optional — needed only if processing real PDF or image documents:
-# pdfminer.six>=20221105   # PDF embedded-text extraction (extraction/ocr_fallback.py)
-# pytesseract>=0.3.0       # OCR for scanned images (extraction/ocr_fallback.py)
-# Pillow>=9.0.0            # Image loading for pytesseract (extraction/ocr_fallback.py)
-# NOTE: pytesseract also requires the Tesseract binary:
-#   Ubuntu/Debian: sudo apt install tesseract-ocr
-#   macOS:         brew install tesseract
-#   Windows:       https://github.com/UB-Mannheim/tesseract/wiki
 
-# Development / test:
+# ============================================================
+# Development / Testing
+# ============================================================
+
 pytest>=7.0.0
 
-# Risk assessment & compliance dependencies (risk/):
+
+# ============================================================
+# Risk Assessment & Compliance
+# ============================================================
+
 scikit-learn>=1.4.0
 xgboost>=2.0.0
 shap>=0.44.0
 pandas>=2.0.0
 numpy>=1.24.0
-
-# Orchestrator API dependencies (orchestrator/):
-fastapi>=0.100.0
-uvicorn>=0.20.0
-pydantic>=2.0.0

@@ -43,6 +43,38 @@ from orchestrator.state import (
 logger = logging.getLogger(__name__)
 
 
+def _promote_applicant_name(loan_file: dict[str, Any]) -> None:
+    """Fill applicant.name from extracted fields when the upload omitted it."""
+    applicant = loan_file.setdefault("applicant", {})
+    current_name = str(applicant.get("name") or "").strip()
+    if current_name and current_name.lower() not in {"unknown", "unknown applicant"}:
+        return
+
+    preferred_fields = ("applicant_name", "employee_name", "account_holder_name")
+    extracted_fields = loan_file.get("extracted_fields") or []
+    for field_name in preferred_fields:
+        candidates = [
+            field for field in extracted_fields
+            if field.get("field_name") == field_name and str(field.get("value") or "").strip()
+        ]
+        if not candidates:
+            continue
+
+        best = max(
+            candidates,
+            key=lambda field: (
+                not bool(field.get("needs_review")),
+                float(field.get("confidence") or 0.0),
+            ),
+        )
+        applicant["name"] = str(best.get("value")).strip()
+        append_audit(
+            loan_file,
+            f"applicant name populated from extracted field {field_name}",
+        )
+        return
+
+
 # ── Stage definitions ────────────────────────────────────────────────────────
 
 def _run_stage(
@@ -159,6 +191,7 @@ def run_pipeline(
         WorkflowStatus.EXTRACTING, critical=False,
     )
     results.append(result)
+    _promote_applicant_name(loan_file)
 
     # Extraction failure is non-critical if some fields exist
     if result.status == StageStatus.FAILED:
@@ -291,6 +324,7 @@ def run_pipeline(
 def run_from_files(
     folder_path: str,
     application_id: str | None = None,
+    applicant: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the full pipeline starting from raw document files.
 
@@ -307,6 +341,8 @@ def run_from_files(
         Completed loan_file.
     """
     loan_file = initialize_loan_file(application_id)
+    if applicant:
+        loan_file["applicant"] = dict(applicant)
 
     # Run Harris's ingestion
     from orchestrator.nodes.ingestion import run_ingestion_from_folder

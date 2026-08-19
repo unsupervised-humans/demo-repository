@@ -195,11 +195,13 @@ def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, Any]
         loan_term = DEFAULT_FEATURE_VALUES["loan_term"]
         defaulted_fields.append("loan_term")
 
-    # 5. cibil_score
+    # 5. cibil_score — extracted from application document CIBIL section
     if "cibil_score" in extracted_map and _clean_numeric(extracted_map["cibil_score"]) is not None:
-        cibil_score = float(_clean_numeric(extracted_map["cibil_score"]))
+        raw_cibil = float(_clean_numeric(extracted_map["cibil_score"]))
+        cibil_score = max(300.0, min(900.0, raw_cibil))  # clamp to valid range
     elif "credit_score" in extracted_map and _clean_numeric(extracted_map["credit_score"]) is not None:
-        cibil_score = float(_clean_numeric(extracted_map["credit_score"]))
+        raw_cibil = float(_clean_numeric(extracted_map["credit_score"]))
+        cibil_score = max(300.0, min(900.0, raw_cibil))  # clamp to valid range
     else:
         cibil_score = DEFAULT_FEATURE_VALUES["cibil_score"]
         defaulted_fields.append("cibil_score")
@@ -258,7 +260,39 @@ def extract_features_from_loan_file(loan_file: Dict[str, Any]) -> Dict[str, Any]
         "loan_to_income_ratio": round(float(loan_to_income_ratio), 4),
         "data_completeness_note": data_completeness_note,
         "_defaulted_fields": defaulted_fields,
+        "cibil_tier": get_cibil_tier(cibil_score),
     }
+
+
+def get_cibil_tier(score: float) -> dict:
+    """Classify a CIBIL score into the standard Indian credit rating tiers.
+
+    Tiers (per TransUnion CIBIL / Indian lending standards):
+        Poor      300 – 619
+        Fair      620 – 659
+        Good      660 – 719
+        Great     720 – 749
+        Excellent 750 – 900
+
+    Returns
+    -------
+    dict with keys: label, color, min_score, max_score, description
+    """
+    s = float(score)
+    if s >= 750:
+        return {"label": "Excellent", "color": "#1a7a2e", "min_score": 750, "max_score": 900,
+                "description": "Very high creditworthiness. Best loan terms available."}
+    if s >= 720:
+        return {"label": "Great", "color": "#5a9e1a", "min_score": 720, "max_score": 749,
+                "description": "Strong credit profile. Favourable loan terms likely."}
+    if s >= 660:
+        return {"label": "Good", "color": "#c8b200", "min_score": 660, "max_score": 719,
+                "description": "Acceptable creditworthiness. Standard terms apply."}
+    if s >= 620:
+        return {"label": "Fair", "color": "#e07b00", "min_score": 620, "max_score": 659,
+                "description": "Marginal credit profile. May require higher interest."}
+    return {"label": "Poor", "color": "#cc2200", "min_score": 300, "max_score": 619,
+            "description": "High credit risk. Loan approval unlikely without collateral."}
 
 
 def validate_mandatory_features(features: Dict[str, Any]) -> Tuple[bool, List[str]]:
