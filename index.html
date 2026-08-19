@@ -292,6 +292,34 @@ header{background:linear-gradient(135deg,rgba(15,23,42,.97) 0%,rgba(8,11,18,.99)
 .toast.success{background:#10b981;color:#fff;box-shadow:0 8px 24px #10b98140}
 .toast.error{background:#ef4444;color:#fff;box-shadow:0 8px 24px #ef444440}
 .toast.info{background:#3b82f6;color:#fff;box-shadow:0 8px 24px #3b82f640}
+
+/* QA CHATBOT */
+.qa-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.qa-messages{padding:16px;display:flex;flex-direction:column;gap:10px;min-height:120px;max-height:320px;overflow-y:auto}
+.qa-msg{display:flex;gap:10px;align-items:flex-start}
+.qa-msg.user{flex-direction:row-reverse}
+.qa-bubble{padding:10px 14px;border-radius:12px;font-size:12.5px;line-height:1.6;max-width:82%}
+.qa-msg.bot .qa-bubble{background:var(--surface2);border:1px solid var(--border2);color:var(--text)}
+.qa-msg.user .qa-bubble{background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff}
+.qa-avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px}
+.qa-msg.bot .qa-avatar{background:var(--surface2);border:1px solid var(--border2)}
+.qa-msg.user .qa-avatar{background:linear-gradient(135deg,var(--accent),var(--purple))}
+.qa-sources{margin-top:6px;font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.qa-conf{display:inline-block;font-size:9.5px;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:600}
+.qa-conf.high{background:#10b98120;color:#10b981}.qa-conf.medium{background:#f59e0b20;color:#f59e0b}.qa-conf.low{background:#ef444420;color:#ef4444}
+.qa-input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface2)}
+.qa-input{flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:9px 14px;
+  color:var(--text);font-size:12.5px;font-family:'Inter',sans-serif;outline:none;transition:border .2s}
+.qa-input:focus{border-color:var(--accent)}
+.qa-input::placeholder{color:var(--text3)}
+.qa-send{background:linear-gradient(135deg,var(--accent),var(--purple));border:none;border-radius:8px;
+  padding:9px 16px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap}
+.qa-send:hover{transform:translateY(-1px);box-shadow:0 4px 12px #3b82f640}
+.qa-send:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.qa-typing{display:flex;gap:4px;align-items:center;padding:4px 0}
+.qa-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:qabounce .9s ease infinite}
+.qa-dot:nth-child(2){animation-delay:.15s}.qa-dot:nth-child(3){animation-delay:.3s}
+@keyframes qabounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 </style>
 </head>
 <body>
@@ -643,6 +671,17 @@ function renderResult(lf){
       </div>
       <div class="coll-body"><div class="audit-body">${auditHtml}</div></div>
     </div>
+
+    <div class="qa-panel">
+      <div class="panel-title" style="padding:20px 22px 0;margin-bottom:12px">Document Q&amp;A Assistant</div>
+      <div class="qa-messages" id="qa-messages-${appId}">
+        <div class="qa-msg bot"><div class="qa-avatar">🤖</div><div class="qa-bubble">Hello! I've analysed this application. Ask me anything about the extracted data, risk factors, validation findings, or documents.</div></div>
+      </div>
+      <div class="qa-input-row">
+        <input class="qa-input" id="qa-input-${appId}" placeholder="Ask about this application… e.g. What is the applicant's income?" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQA('${appId}');}"/>
+        <button class="qa-send" id="qa-send-${appId}" onclick="sendQA('${appId}')">Send ↵</button>
+      </div>
+    </div>
   `;
 
   requestAnimationFrame(()=>{
@@ -814,6 +853,40 @@ async function submitDecision(decision){
     if(!(latest.reviewer_decision&&latest.reviewer_decision.decision)){
       buttons.forEach(b=>b.disabled=false);
     }
+  }
+}
+
+
+async function sendQA(appId){
+  const input=document.getElementById('qa-input-'+appId);
+  const sendBtn=document.getElementById('qa-send-'+appId);
+  const msgBox=document.getElementById('qa-messages-'+appId);
+  const q=(input.value||'').trim();
+  if(!q||!appId){return;}
+  // User bubble
+  msgBox.innerHTML+=`<div class="qa-msg user"><div class="qa-avatar">👤</div><div class="qa-bubble">${q.replace(/</g,'&lt;')}</div></div>`;
+  input.value='';sendBtn.disabled=true;
+  // Typing indicator
+  const typingId='qa-typing-'+Date.now();
+  msgBox.innerHTML+=`<div class="qa-msg bot" id="${typingId}"><div class="qa-avatar">🤖</div><div class="qa-bubble"><div class="qa-typing"><div class="qa-dot"></div><div class="qa-dot"></div><div class="qa-dot"></div></div></div></div>`;
+  msgBox.scrollTop=msgBox.scrollHeight;
+  try{
+    const r=await fetch(API+'/api/review/'+appId+'/question',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q})});
+    const data=await r.json();
+    document.getElementById(typingId)?.remove();
+    const ans=data.answer||'I cannot determine this from the available documents.';
+    const conf=data.confidence||'low';
+    const srcs=(data.sources||[]).map(s=>`${s.doc_id} p.${s.page}`).join(', ');
+    const confBadge=`<span class="qa-conf ${conf}">${conf.toUpperCase()}</span>`;
+    const srcLine=srcs?`<div class="qa-sources">📎 ${srcs}</div>`:'';
+    msgBox.innerHTML+=`<div class="qa-msg bot"><div class="qa-avatar">🤖</div><div class="qa-bubble">${ans.replace(/</g,'&lt;').replace(/\n/g,'<br>')}${confBadge}${srcLine}</div></div>`;
+  }catch(e){
+    document.getElementById(typingId)?.remove();
+    msgBox.innerHTML+=`<div class="qa-msg bot"><div class="qa-avatar">🤖</div><div class="qa-bubble" style="color:var(--red)">Error: ${e.message}</div></div>`;
+  }finally{
+    sendBtn.disabled=false;msgBox.scrollTop=msgBox.scrollHeight;
   }
 }
 
