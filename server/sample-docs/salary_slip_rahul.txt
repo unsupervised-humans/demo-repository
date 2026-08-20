@@ -1,0 +1,11 @@
+LoanReady Demo — Sample Salary Slip (mock data, not real PII)
+
+Employee: Rahul Sharma
+Employer: TechVista Solutions Pvt Ltd
+Pay Period: August 2026
+Gross Salary: 87000
+Net Salary: 73080
+Designation: Senior Analyst
+Employee ID: TV-4521
+
+See salary_slip_2026-08.pdf / payslip_2026-08.pdf for the full PDF.
