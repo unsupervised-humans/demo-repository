@@ -1,0 +1,10 @@
+LoanReady Demo — Sample Bank Statement Summary (mock)
+
+Account Holder: Rahul Sharma
+Bank: HDFC Bank
+Period: August 2025 – January 2026
+Average Balance: 145000
+Monthly Salary Credit: 72000
+EMI Debits: ~12000/month
+
+See bank_statement_6months.pdf for the full PDF.
