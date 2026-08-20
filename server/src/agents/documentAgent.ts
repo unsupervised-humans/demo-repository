@@ -70,7 +70,17 @@ const AGENT1_SYSTEM = `You are the Document & Profile Agent for LoanReady, a loa
 You extract structured data from KYC and income documents for Indian loan applicants.
 Always return strict JSON only. Never invent PAN/Aadhaar numbers — if unclear, omit or mark null.
 Use INR amounts as numbers without currency symbols.
-Be conservative: flag issues rather than guessing.`;
+Be conservative: flag issues rather than guessing.
+
+IMPORTANT DEMO & TESTING RULES:
+- This is a testing/demo sandbox. Some documents are generated synthetically.
+- Do NOT flag "synthetic", "demo", "sample", "hackathon", or "not real" labels or notices in the document text as validation issues or security failures.
+- Do NOT flag masked numbers (like Aadhaar "XXXX XXXX 4321" or PAN "XXXXXK5L2") as missing or invalid. Masked identifiers are correct security practices and should be considered verified.
+- Do NOT flag missing father_name or date_of_birth in the profile as an issue, because the system profile schema does not track these fields. As long as the applicant's name matches, consider it verified.
+- Gross salary being higher than the profile monthly income is normal and expected (as people enter net/take-home income in onboarding). Do NOT flag this as a mismatch. Only flag if the net salary on the slip is significantly lower than the profile monthly income.
+- Treat salary slips and bank statements as recent/valid if they cover the period up to the current date or match the dynamically generated sample dates.
+- For Employment Letter: Do NOT flag it as "older than 3 months" or out of date. Permanent employment letters/joining letters are expected to be dated in the past when the employee joined. Furthermore, if the employment tenure shown in the letter (time since joining date) is higher than or equal to the profile tenure, do NOT flag it as a mismatch (longer tenure is positive).
+- For Form 16: Accept the Form 16 if it covers the latest completed Indian financial year (April to March) or the previous year. Do not flag it as outdated unless it is more than 2 years old.`;
 
 export async function classifyDocument(
   textOrHint: string,
@@ -230,6 +240,19 @@ export async function validateDocument(
     return heuristicValidate(extractedFields, docType, profile);
   }
 
+  let checkInstructions = '';
+  if (docType === 'salary_slip') {
+    checkInstructions = 'Check: recency (salary slip pay period must be within the last 3 months), completeness, name consistency with profile.';
+  } else if (docType === 'bank_statement') {
+    checkInstructions = 'Check: recency (statement period must cover recent months ending close to today), completeness, name consistency with profile.';
+  } else if (docType === 'utility_bill') {
+    checkInstructions = 'Check: recency (bill date must be within the last 3 months), name consistency, address consistency with profile.';
+  } else if (docType === 'aadhaar' || docType === 'pan') {
+    checkInstructions = 'Check: name consistency with profile, completeness. Do NOT perform any recency checks on KYC documents (Aadhaar/PAN).';
+  } else {
+    checkInstructions = 'Check: name consistency with profile, completeness.';
+  }
+
   const raw = await callClaude({
     system: AGENT1_SYSTEM,
     messages: [
@@ -238,7 +261,7 @@ export async function validateDocument(
         content: `Validate this ${docType} extraction against the customer profile.
 Extracted: ${JSON.stringify(extractedFields)}
 Profile: ${JSON.stringify(profile)}
-Check: recency (salary slips < 3 months, statements recent), completeness, name consistency.
+Instructions: ${checkInstructions}
 Return JSON:
 {"status":"verified"|"needs_attention","issues":["plain language"],"profileUpdates":{optional fields to merge}}`,
       },

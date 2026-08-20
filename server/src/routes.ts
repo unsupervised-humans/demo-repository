@@ -52,7 +52,7 @@ const upload = multer({
       file.mimetype.startsWith('image/') ||
       file.mimetype === 'application/pdf' ||
       file.mimetype === 'text/plain';
-    cb(ok ? null : new Error('Only PDF, images, and text files are allowed'), ok);
+    cb(ok ? null : (new Error('Only PDF, images, and text files are allowed') as any), ok);
   },
 });
 
